@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
+import { motion } from 'motion/react'
 import { api } from '@/lib/api'
+import { fadeUp, stagger, transition } from '@/lib/motion'
 
 type TripDetail = {
   trip: {
@@ -52,8 +54,13 @@ export function ActiveTrip() {
     : new Date(trip.departureAt)
 
   return (
-    <div className="pt-4">
-      <div className="card-base overflow-hidden">
+    <motion.div
+      variants={stagger(0.08, 0.02)}
+      initial="hidden"
+      animate="show"
+      className="pt-4"
+    >
+      <motion.div variants={fadeUp} transition={transition.default} className="card-base overflow-hidden">
         <div
           className="relative h-[280px]"
           style={{
@@ -113,15 +120,17 @@ export function ActiveTrip() {
 
           <SOSButton tripId={trip.id} />
         </div>
-      </div>
+      </motion.div>
 
-      <Link
-        to={q.data.isDriver ? '/drive' : '/ride'}
-        className="mt-4 block text-center text-[12px] text-[var(--color-stone)] underline underline-offset-[3px]"
-      >
-        Back
-      </Link>
-    </div>
+      <motion.div variants={fadeUp} transition={transition.default}>
+        <Link
+          to={q.data.isDriver ? '/drive' : '/ride'}
+          className="mt-4 block text-center text-[12px] text-[var(--color-stone)] underline underline-offset-[3px]"
+        >
+          Back
+        </Link>
+      </motion.div>
+    </motion.div>
   )
 }
 

@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { motion } from 'motion/react'
+import { motion, AnimatePresence } from 'motion/react'
 import { ApiError, api } from '@/lib/api'
 import { useTripSeats } from '@/lib/useSeats'
+import { fadeUp, stagger, transition } from '@/lib/motion'
+
 type Hub = { id: string; name: string }
 type TripCard = {
   id: string
@@ -22,7 +24,6 @@ type TripCard = {
 function defaultDepartureLocal(): string {
   const d = new Date(Date.now() + 30 * 60 * 1000)
   d.setSeconds(0, 0)
-  // Local "YYYY-MM-DDTHH:MM" for <input type="datetime-local">
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
@@ -47,7 +48,6 @@ export function DriverHome() {
 
   const [showForm, setShowForm] = useState(false)
 
-  // Check driver verification status
   const driverProfile = useQuery<{ status: string } | null>({
     queryKey: ['driver', 'me'],
     queryFn: () => api.get<{ status: string }>('/driver/me').catch(() => null),
@@ -57,57 +57,99 @@ export function DriverHome() {
   const hasPending = driverProfile.data?.status === 'pending'
 
   return (
-    <div className="pt-4">
-      {!driverProfile.isLoading && !isApproved && !hasPending ? (
-        <div className="card-base p-4 mb-4" style={{ borderColor: 'var(--color-clay-soft)' }}>
-          <div className="label-cap text-[var(--color-clay)]">Driver verification</div>
-          <p className="mt-1 text-[12px] text-[var(--color-stone)]">Apply to drive — two stewards verify your details before you can publish trips.</p>
-          <Link to="/drive/apply" className="btn-primary mt-3 h-10 px-4 text-xs inline-flex">Apply to drive</Link>
-        </div>
-      ) : hasPending ? (
-        <div className="card-base p-4 mb-4 bg-[var(--color-cream)]">
-          <div className="label-cap">Verification pending</div>
-          <p className="mt-1 text-[12px] text-[var(--color-stone)]">Two stewards are reviewing your application. You'll be notified when it's decided.</p>
-        </div>
-      ) : null}
-      {liveTrip ? <ActiveDriverTrip trip={liveTrip} /> : null}
+    <motion.div
+      variants={stagger(0.08, 0.04)}
+      initial="hidden"
+      animate="show"
+      className="pt-4"
+    >
+      <AnimatePresence>
+        {!driverProfile.isLoading && !isApproved && !hasPending ? (
+          <motion.div
+            key="apply-banner"
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={transition.default}
+            className="card-base p-4 mb-4"
+            style={{ borderColor: 'var(--color-clay-soft)' }}
+          >
+            <div className="label-cap text-[var(--color-clay)]">Driver verification</div>
+            <p className="mt-1 text-[12px] text-[var(--color-stone)]">Apply to drive — two stewards verify your details before you can publish trips.</p>
+            <Link to="/drive/apply" className="btn-primary mt-3 h-10 px-4 text-xs inline-flex">Apply to drive</Link>
+          </motion.div>
+        ) : hasPending ? (
+          <motion.div
+            key="pending-banner"
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={transition.default}
+            className="card-base p-4 mb-4 bg-[var(--color-cream)]"
+          >
+            <div className="label-cap">Verification pending</div>
+            <p className="mt-1 text-[12px] text-[var(--color-stone)]">Two stewards are reviewing your application. You'll be notified when it's decided.</p>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
 
-      {!showForm ? (
-        <button
-          onClick={() => {
-            if (isApproved) setShowForm(true)
-          }}
-          disabled={!isApproved}
-          className="mt-4 w-full h-[52px] rounded-[14px] border border-[var(--color-hairline)] bg-[var(--color-paper)] text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <span className="text-base leading-none">+</span> Publish a trip
-        </button>
-      ) : (
-        <PublishTripForm
-          hubs={hubs.data?.items ?? []}
-          onCancel={() => setShowForm(false)}
-          onDone={() => {
-            setShowForm(false)
-            qc.invalidateQueries({ queryKey: ['drive', 'trips'] })
-          }}
-        />
-      )}
+      <AnimatePresence>
+        {liveTrip ? (
+          <motion.div
+            key="live-trip"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.98 }}
+            transition={transition.default}
+          >
+            <ActiveDriverTrip trip={liveTrip} />
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence mode="wait">
+        {!showForm ? (
+          <motion.button
+            key="publish-btn"
+            variants={fadeUp}
+            initial="hidden"
+            animate="show"
+            exit={{ opacity: 0, y: -6 }}
+            transition={transition.default}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => { if (isApproved) setShowForm(true) }}
+            disabled={!isApproved}
+            className="mt-4 w-full h-[52px] rounded-[14px] border border-[var(--color-hairline)] bg-[var(--color-paper)] text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <span className="text-base leading-none">+</span> Publish a trip
+          </motion.button>
+        ) : (
+          <motion.div
+            key="publish-form"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={transition.default}
+          >
+            <PublishTripForm
+              hubs={hubs.data?.items ?? []}
+              onCancel={() => setShowForm(false)}
+              onDone={() => {
+                setShowForm(false)
+                qc.invalidateQueries({ queryKey: ['drive', 'trips'] })
+              }}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <Impact />
       <PastTrips trips={myTrips.data?.items ?? []} />
-    </div>
+    </motion.div>
   )
 }
 
-function PublishTripForm({
-  hubs,
-  onCancel,
-  onDone,
-}: {
-  hubs: Hub[]
-  onCancel: () => void
-  onDone: () => void
-}) {
+function PublishTripForm({ hubs, onCancel, onDone }: { hubs: Hub[]; onCancel: () => void; onDone: () => void }) {
   const [originHubId, setOriginHubId] = useState(hubs[0]?.id ?? '')
   const [destination, setDestination] = useState('Faculty of Engineering')
   const [departureLocal, setDepartureLocal] = useState(defaultDepartureLocal())
@@ -139,16 +181,12 @@ function PublishTripForm({
       onSubmit={(e) => {
         e.preventDefault()
         setError(null)
-        if (!originHubId) {
-          setError('Pick a hub.')
-          return
-        }
+        if (!originHubId) { setError('Pick a hub.'); return }
         publish.mutate()
       }}
       className="mt-4 card-base p-5"
     >
       <div className="label-cap">Publish a trip</div>
-
       <div className="mt-3 space-y-3">
         <div>
           <label className="text-[11px] text-[var(--color-stone)]">From hub</label>
@@ -157,14 +195,9 @@ function PublishTripForm({
             onChange={(e) => setOriginHubId(e.target.value)}
             className="mt-1 w-full bg-[var(--color-cream)] border border-[var(--color-hairline)] rounded-[12px] px-3 h-11 text-sm"
           >
-            {hubs.map((h) => (
-              <option key={h.id} value={h.id}>
-                {h.name}
-              </option>
-            ))}
+            {hubs.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
           </select>
         </div>
-
         <div>
           <label className="text-[11px] text-[var(--color-stone)]">To</label>
           <input
@@ -174,7 +207,6 @@ function PublishTripForm({
             placeholder="Faculty of Engineering"
           />
         </div>
-
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-[11px] text-[var(--color-stone)]">Depart</label>
@@ -197,7 +229,6 @@ function PublishTripForm({
             />
           </div>
         </div>
-
         <div>
           <label className="text-[11px] text-[var(--color-stone)]">
             Vehicle plate <span className="text-[var(--color-stone-soft)]">· optional</span>
@@ -211,23 +242,39 @@ function PublishTripForm({
         </div>
       </div>
 
-      {error ? <p className="mt-3 text-[12px] text-[var(--color-coral)]" role="alert">{error}</p> : null}
+      <AnimatePresence>
+        {error ? (
+          <motion.p
+            key="err"
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={transition.fast}
+            className="mt-3 text-[12px] text-[var(--color-coral)]"
+            role="alert"
+          >
+            {error}
+          </motion.p>
+        ) : null}
+      </AnimatePresence>
 
       <div className="mt-4 flex gap-2">
-        <button
+        <motion.button
           type="button"
+          whileTap={{ scale: 0.97 }}
           onClick={onCancel}
           className="flex-1 h-11 rounded-[12px] border border-[var(--color-hairline)] bg-[var(--color-paper)] text-sm"
         >
           Cancel
-        </button>
-        <button
+        </motion.button>
+        <motion.button
           type="submit"
+          whileTap={{ scale: 0.97 }}
           disabled={publish.isPending}
           className="flex-1 h-11 rounded-[12px] bg-[var(--color-indigo)] text-[var(--color-paper)] text-sm font-medium"
         >
           {publish.isPending ? 'Publishing…' : 'Publish'}
-        </button>
+        </motion.button>
       </div>
     </form>
   )
@@ -309,9 +356,9 @@ function ActiveDriverTrip({ trip }: { trip: TripCard }) {
         <div className="mt-1 flex items-baseline gap-2">
           <motion.span
             key={bookedCount}
-            initial={{ scale: 1.15, color: 'var(--color-clay)' }}
+            initial={{ scale: 1.2, color: 'var(--color-clay)' }}
             animate={{ scale: 1, color: 'var(--color-indigo)' }}
-            transition={{ duration: 0.25 }}
+            transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
             className="text-[44px] font-medium tracking-tight"
           >
             {bookedCount}
@@ -320,14 +367,19 @@ function ActiveDriverTrip({ trip }: { trip: TripCard }) {
         </div>
         {trip.totalSeats > 0 ? (
           <div className="mt-2 flex gap-2">
-            {riders.map((r) => (
-              <div
-                key={r.bookingId}
-                className="min-w-0 flex-1 rounded-lg px-2 py-2 text-center text-[10px] font-medium bg-[var(--color-indigo)] text-[var(--color-paper)] truncate"
-              >
-                {r.riderFirst}
-              </div>
-            ))}
+            <AnimatePresence>
+              {riders.map((r) => (
+                <motion.div
+                  key={r.bookingId}
+                  initial={{ opacity: 0, scale: 0.85 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.2 }}
+                  className="min-w-0 flex-1 rounded-lg px-2 py-2 text-center text-[10px] font-medium bg-[var(--color-indigo)] text-[var(--color-paper)] truncate"
+                >
+                  {r.riderFirst}
+                </motion.div>
+              ))}
+            </AnimatePresence>
             {Array.from({ length: Math.max(seatsLeft, 0) }).map((_, i) => (
               <div
                 key={i}
@@ -343,18 +395,20 @@ function ActiveDriverTrip({ trip }: { trip: TripCard }) {
       <div className="mt-4 flex gap-2">
         {trip.status === 'published' ? (
           <>
-            <button
+            <motion.button
+              whileTap={{ scale: 0.97 }}
               onClick={() => cancel.mutate()}
               className="flex-1 h-10 text-xs rounded-[12px] border border-[var(--color-hairline)] bg-[var(--color-paper)]"
             >
               Cancel trip
-            </button>
-            <button
+            </motion.button>
+            <motion.button
+              whileTap={{ scale: 0.97 }}
               onClick={() => start.mutate()}
               className="flex-1 h-10 text-xs rounded-[12px] bg-[var(--color-indigo)] text-[var(--color-paper)]"
             >
               Start trip
-            </button>
+            </motion.button>
           </>
         ) : trip.status === 'in_transit' ? (
           <>
@@ -364,12 +418,13 @@ function ActiveDriverTrip({ trip }: { trip: TripCard }) {
             >
               Open trip view
             </Link>
-            <button
+            <motion.button
+              whileTap={{ scale: 0.97 }}
               onClick={() => complete.mutate()}
               className="flex-1 h-10 text-xs rounded-[12px] bg-[var(--color-moss)] text-[var(--color-paper)]"
             >
               Complete trip
-            </button>
+            </motion.button>
           </>
         ) : null}
       </div>
@@ -386,19 +441,31 @@ function Impact() {
   if (!q.data) return null
   const { seatsTotal, tripsTotal } = q.data
   return (
-    <section className="mt-6">
+    <motion.section
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ ...transition.slow, delay: 0.2 }}
+      className="mt-6"
+    >
       <div className="label-cap mb-2">Your impact</div>
       <div className="grid grid-cols-2 gap-2">
-        <div className="card-base p-4">
-          <div className="text-[32px] font-medium tracking-tight text-[var(--color-indigo)]">{seatsTotal}</div>
-          <div className="label-cap mt-1">seats donated</div>
-        </div>
-        <div className="card-base p-4">
-          <div className="text-[32px] font-medium tracking-tight text-[var(--color-indigo)]">{tripsTotal}</div>
-          <div className="label-cap mt-1">trips completed</div>
-        </div>
+        {[
+          { value: seatsTotal, label: 'seats donated' },
+          { value: tripsTotal, label: 'trips completed' },
+        ].map(({ value, label }, i) => (
+          <motion.div
+            key={label}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ ...transition.default, delay: 0.25 + i * 0.08 }}
+            className="card-base p-4"
+          >
+            <div className="text-[32px] font-medium tracking-tight text-[var(--color-indigo)]">{value}</div>
+            <div className="label-cap mt-1">{label}</div>
+          </motion.div>
+        ))}
       </div>
-    </section>
+    </motion.section>
   )
 }
 
@@ -406,7 +473,12 @@ function PastTrips({ trips }: { trips: TripCard[] }) {
   const past = trips.filter((t) => t.status === 'completed' || t.status === 'cancelled')
   if (past.length === 0) return null
   return (
-    <section className="mt-6">
+    <motion.section
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ ...transition.slow, delay: 0.35 }}
+      className="mt-6"
+    >
       <div className="label-cap mb-2">Recent trips</div>
       <div className="card-base divide-y divide-[var(--color-hairline)]">
         {past.slice(0, 8).map((t) => (
@@ -417,22 +489,17 @@ function PastTrips({ trips }: { trips: TripCard[] }) {
               </div>
               <div className="text-[10px] text-[var(--color-stone)] mt-0.5">
                 {new Date(t.departureAt).toLocaleString('en-NG', {
-                  day: '2-digit',
-                  month: 'short',
-                  hour: '2-digit',
-                  minute: '2-digit',
+                  day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
                 })}
               </div>
             </div>
             <div className="text-right text-xs">
-              <div className="font-mono text-[var(--color-indigo)]">
-                {t.bookedCount}/{t.totalSeats}
-              </div>
+              <div className="font-mono text-[var(--color-indigo)]">{t.bookedCount}/{t.totalSeats}</div>
               <div className="text-[10px] text-[var(--color-stone)] uppercase tracking-wider">{t.status}</div>
             </div>
           </div>
         ))}
       </div>
-    </section>
+    </motion.section>
   )
 }

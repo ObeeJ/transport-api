@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { motion, AnimatePresence } from 'motion/react'
 import { ApiError, api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { fadeUp, stagger, ease, transition } from '@/lib/motion'
 
 type Hub = { id: string; name: string }
 type TripCard = {
@@ -110,21 +112,38 @@ export function RiderHome() {
   })
 
   return (
-    <div className="pt-4">
-      <p className="text-[13px] text-[var(--color-stone)]">
+    <motion.div
+      variants={stagger(0.07, 0.04)}
+      initial="hidden"
+      animate="show"
+      className="pt-4"
+    >
+      <motion.p variants={fadeUp} transition={transition.fast} className="text-[13px] text-[var(--color-stone)]">
         Good morning{user?.email ? `, ${user.email.split('@')[0]}` : ''}.
-      </p>
+      </motion.p>
 
-      {activeBooking ? <ActiveTripTile booking={activeBooking} /> : null}
+      <AnimatePresence>
+        {activeBooking ? (
+          <motion.div
+            key="active"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={transition.default}
+          >
+            <ActiveTripTile booking={activeBooking} />
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
 
-      <div className="mt-6 flex items-baseline justify-between">
+      <motion.div variants={fadeUp} transition={transition.default} className="mt-6 flex items-baseline justify-between">
         <h2 className="text-2xl font-medium tracking-tight text-[var(--color-indigo)]">Find a ride</h2>
         <span className="font-mono text-[10px] text-[var(--color-stone)]">
           {trips.data?.items.length ?? 0} upcoming
         </span>
-      </div>
+      </motion.div>
 
-      <div className="mt-3 flex gap-2 overflow-x-auto">
+      <motion.div variants={fadeUp} transition={transition.default} className="mt-3 flex gap-2 overflow-x-auto">
         <Chip active={hubFilter === ''} onClick={() => setHubFilter('')}>
           All hubs
         </Chip>
@@ -133,96 +152,115 @@ export function RiderHome() {
             {h.name}
           </Chip>
         ))}
-      </div>
+      </motion.div>
 
       {trips.isLoading ? (
-        <p className="mt-6 text-sm text-[var(--color-stone)]">Loading trips…</p>
+        <motion.p variants={fadeUp} transition={transition.default} className="mt-6 text-sm text-[var(--color-stone)]">Loading trips…</motion.p>
       ) : trips.data && trips.data.items.length === 0 ? (
-        <div className="mt-6 card-base p-5 text-center">
+        <motion.div variants={fadeUp} transition={transition.default} className="mt-6 card-base p-5 text-center">
           <p className="text-sm text-[var(--color-stone)]">
             No upcoming trips right now. Check back soon — or ask in class for someone to publish one.
           </p>
-        </div>
+        </motion.div>
       ) : (
-        trips.data?.items.map((t) => {
-          const myBooking = activeBookingByTrip[t.id]
-          const isMine = t.driverId === user?.id
-          return (
-            <article key={t.id} className="card-base mt-3 p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="size-7 rounded-full bg-[var(--color-cream-2)] inline-flex items-center justify-center text-[13px] font-medium text-[var(--color-indigo)]">
-                    {(t.driverName ?? '?').charAt(0)}
-                  </span>
-                  <div>
-                    <div className="text-sm font-medium">{t.driverName ?? 'Driver'}</div>
-                    <div className="text-[11px] text-[var(--color-stone)] font-mono uppercase">
-                      {t.vehiclePlate || '—'}
+        <motion.div variants={stagger(0.06, 0.1)} initial="hidden" animate="show">
+          {trips.data?.items.map((t) => {
+            const myBooking = activeBookingByTrip[t.id]
+            const isMine = t.driverId === user?.id
+            return (
+              <motion.article
+                key={t.id}
+                variants={fadeUp}
+                transition={transition.default}
+                className="card-base mt-3 p-4"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="size-7 rounded-full bg-[var(--color-cream-2)] inline-flex items-center justify-center text-[13px] font-medium text-[var(--color-indigo)]">
+                      {(t.driverName ?? '?').charAt(0)}
+                    </span>
+                    <div>
+                      <div className="text-sm font-medium">{t.driverName ?? 'Driver'}</div>
+                      <div className="text-[11px] text-[var(--color-stone)] font-mono uppercase">
+                        {t.vehiclePlate || '—'}
+                      </div>
                     </div>
                   </div>
+                  <div className="text-right">
+                    <div className="text-xl font-medium tracking-tight text-[var(--color-indigo)]">{timeOnly(t.departureAt)}</div>
+                    <div className="text-[10px] text-[var(--color-stone)]">{minutesFromNow(t.departureAt)}</div>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-xl font-medium tracking-tight text-[var(--color-indigo)]">{timeOnly(t.departureAt)}</div>
-                  <div className="text-[10px] text-[var(--color-stone)]">{minutesFromNow(t.departureAt)}</div>
+                <div className="my-3 h-px bg-[var(--color-hairline)]" />
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-[var(--color-stone)]">
+                    {t.hubName} <span className="text-[var(--color-clay)]">→</span> {t.destination}
+                  </span>
+                  <span className={`font-mono ${t.seatsLeft === 0 ? 'text-[var(--color-stone)]' : 'text-[var(--color-moss)]'}`}>
+                    {t.seatsLeft} / {t.totalSeats} seats
+                  </span>
                 </div>
-              </div>
-              <div className="my-3 h-px bg-[var(--color-hairline)]" />
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-[var(--color-stone)]">
-                  {t.hubName} <span className="text-[var(--color-clay)]">→</span> {t.destination}
-                </span>
-                <span className={`font-mono ${t.seatsLeft === 0 ? 'text-[var(--color-stone)]' : 'text-[var(--color-moss)]'}`}>
-                  {t.seatsLeft} / {t.totalSeats} seats
-                </span>
-              </div>
 
-              <div className="mt-3 flex gap-2">
-                {isMine ? (
-                  <div className="flex-1 h-10 rounded-[12px] flex items-center justify-center text-xs text-[var(--color-stone)] border border-[var(--color-hairline)]">
-                    Your trip
-                  </div>
-                ) : myBooking ? (
-                  <>
-                    <Link
-                      to={`/trip/${t.id}`}
-                      className="flex-1 h-10 rounded-[12px] border border-[var(--color-hairline)] bg-[var(--color-paper)] text-xs flex items-center justify-center"
+                <div className="mt-3 flex gap-2">
+                  {isMine ? (
+                    <div className="flex-1 h-10 rounded-[12px] flex items-center justify-center text-xs text-[var(--color-stone)] border border-[var(--color-hairline)]">
+                      Your trip
+                    </div>
+                  ) : myBooking ? (
+                    <>
+                      <Link
+                        to={`/trip/${t.id}`}
+                        className="flex-1 h-10 rounded-[12px] border border-[var(--color-hairline)] bg-[var(--color-paper)] text-xs flex items-center justify-center"
+                      >
+                        View trip
+                      </Link>
+                      <motion.button
+                        whileTap={{ scale: 0.97 }}
+                        onClick={() => cancelBooking.mutate(t.id)}
+                        disabled={cancelBooking.isPending}
+                        className="flex-1 h-10 rounded-[12px] border border-[var(--color-coral)]/30 text-[var(--color-coral)] text-xs"
+                      >
+                        {cancelBooking.isPending ? '…' : 'Cancel seat'}
+                      </motion.button>
+                    </>
+                  ) : t.seatsLeft <= 0 ? (
+                    <div className="flex-1 h-10 rounded-[12px] flex items-center justify-center text-xs text-[var(--color-stone)] border border-[var(--color-hairline)]">
+                      Full
+                    </div>
+                  ) : (
+                    <motion.button
+                      whileTap={{ scale: 0.97 }}
+                      onClick={() => book.mutate(t.id)}
+                      disabled={book.isPending}
+                      className="flex-1 h-10 rounded-[12px] bg-[var(--color-indigo)] text-[var(--color-paper)] text-xs font-medium"
                     >
-                      View trip
-                    </Link>
-                    <button
-                      onClick={() => cancelBooking.mutate(t.id)}
-                      disabled={cancelBooking.isPending}
-                      className="flex-1 h-10 rounded-[12px] border border-[var(--color-coral)]/30 text-[var(--color-coral)] text-xs"
+                      {book.isPending ? '…' : 'Book a seat'}
+                    </motion.button>
+                  )}
+                </div>
+                <AnimatePresence>
+                  {book.error && book.variables === t.id ? (
+                    <motion.p
+                      key="err"
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      transition={transition.fast}
+                      className="mt-2 text-[11px] text-[var(--color-coral)]"
+                      role="alert"
                     >
-                      {cancelBooking.isPending ? '…' : 'Cancel seat'}
-                    </button>
-                  </>
-                ) : t.seatsLeft <= 0 ? (
-                  <div className="flex-1 h-10 rounded-[12px] flex items-center justify-center text-xs text-[var(--color-stone)] border border-[var(--color-hairline)]">
-                    Full
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => book.mutate(t.id)}
-                    disabled={book.isPending}
-                    className="flex-1 h-10 rounded-[12px] bg-[var(--color-indigo)] text-[var(--color-paper)] text-xs font-medium"
-                  >
-                    {book.isPending ? '…' : 'Book a seat'}
-                  </button>
-                )}
-              </div>
-              {book.error && book.variables === t.id ? (
-                <p className="mt-2 text-[11px] text-[var(--color-coral)]" role="alert">
-                  {book.error instanceof ApiError ? book.error.message : 'Could not book.'}
-                </p>
-              ) : null}
-            </article>
-          )
-        })
+                      {book.error instanceof ApiError ? book.error.message : 'Could not book.'}
+                    </motion.p>
+                  ) : null}
+                </AnimatePresence>
+              </motion.article>
+            )
+          })}
+        </motion.div>
       )}
 
       <PastRides bookings={myBookings.data?.items ?? []} />
-    </div>
+    </motion.div>
   )
 }
 
@@ -365,16 +403,18 @@ function Chip({
   children: React.ReactNode
 }) {
   return (
-    <button
+    <motion.button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center px-3 py-1 rounded-full text-[11px] font-medium tracking-wide uppercase shrink-0 ${
+      whileTap={{ scale: 0.94 }}
+      transition={transition.fast}
+      className={`inline-flex items-center px-3 py-1 rounded-full text-[11px] font-medium tracking-wide uppercase shrink-0 transition-colors duration-150 ${
         active
           ? 'bg-[var(--color-indigo)] text-[var(--color-paper)]'
           : 'bg-[var(--color-cream-2)] text-[var(--color-ink)]'
       }`}
     >
       {children}
-    </button>
+    </motion.button>
   )
 }

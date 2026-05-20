@@ -2,6 +2,7 @@ import { Link } from 'react-router'
 import { motion } from 'motion/react'
 import { useAuth } from '@/lib/auth'
 import { useRoles, roleLabels } from '@/lib/useRoles'
+import { fadeUp, stagger, transition } from '@/lib/motion'
 
 export function AccountPage() {
   const { user, logout } = useAuth()
@@ -9,17 +10,20 @@ export function AccountPage() {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.2 }}
+      variants={stagger(0.07, 0.04)}
+      initial="hidden"
+      animate="show"
       className="pt-4 space-y-4"
     >
-      <h2 className="text-[28px] font-medium tracking-tight text-[var(--color-indigo)] leading-tight">
+      <motion.h2
+        variants={fadeUp}
+        transition={transition.default}
+        className="text-[28px] font-medium tracking-tight text-[var(--color-indigo)] leading-tight"
+      >
         Account.
-      </h2>
+      </motion.h2>
 
-      {/* Profile */}
-      <div className="card-base p-5">
+      <motion.div variants={fadeUp} transition={transition.default} className="card-base p-5">
         <div className="label-cap mb-3">Profile</div>
         <div className="space-y-3">
           <Row label="Email" value={user?.email ?? '—'} />
@@ -39,10 +43,9 @@ export function AccountPage() {
             Verify email →
           </Link>
         )}
-      </div>
+      </motion.div>
 
-      {/* Active roles */}
-      <div className="card-base p-5">
+      <motion.div variants={fadeUp} transition={transition.default} className="card-base p-5">
         <div className="label-cap mb-3">Your roles</div>
         <div className="flex flex-wrap gap-2">
           {roles.map((r) => (
@@ -57,10 +60,9 @@ export function AccountPage() {
         <p className="mt-3 text-[11px] text-[var(--color-stone)]">
           Roles are unlocked automatically — apply to drive or receive support to add more.
         </p>
-      </div>
+      </motion.div>
 
-      {/* Student ID */}
-      <div className="card-base p-5">
+      <motion.div variants={fadeUp} transition={transition.default} className="card-base p-5">
         <div className="label-cap mb-2">Student ID verification</div>
         <p className="text-[12px] text-[var(--color-stone)]">
           Required before applying for support. One-way hash — never stored in plain text.
@@ -71,21 +73,24 @@ export function AccountPage() {
         >
           Verify student ID →
         </Link>
-      </div>
+      </motion.div>
 
-      {/* Sign out */}
-      <div className="card-base p-5">
+      <motion.div variants={fadeUp} transition={transition.default} className="card-base p-5">
         <button
           onClick={() => logout()}
           className="w-full h-11 rounded-[12px] border border-[var(--color-hairline)] text-sm text-[var(--color-stone)] hover:text-[var(--color-coral)] hover:border-[var(--color-coral)]/30 transition-colors"
         >
           Sign out
         </button>
-      </div>
+      </motion.div>
 
-      <p className="text-[10px] text-center text-[var(--color-stone)] pb-4">
+      <motion.p
+        variants={fadeUp}
+        transition={transition.slow}
+        className="text-[10px] text-center text-[var(--color-stone)] pb-4"
+      >
         Member since {user?.createdAt ? new Date(user.createdAt).toLocaleDateString('en-NG', { month: 'long', year: 'numeric' }) : '—'}
-      </p>
+      </motion.p>
     </motion.div>
   )
 }

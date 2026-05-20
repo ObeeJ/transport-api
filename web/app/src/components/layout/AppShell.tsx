@@ -1,4 +1,5 @@
 import { Outlet, NavLink, Link } from 'react-router'
+import { motion } from 'motion/react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth'
 
@@ -71,14 +72,25 @@ export function AppShell() {
               to={item.to}
               className={({ isActive }) =>
                 cn(
-                  'py-3 text-center text-[11px] font-medium tracking-wide uppercase transition-colors',
+                  'relative py-3 text-center text-[11px] font-medium tracking-wide uppercase transition-colors',
                   isActive
                     ? 'text-[var(--color-indigo)]'
                     : 'text-[var(--color-stone)] hover:text-[var(--color-ink)]',
                 )
               }
             >
-              {item.label}
+              {({ isActive }) => (
+                <>
+                  {item.label}
+                  {isActive ? (
+                    <motion.span
+                      layoutId="nav-indicator"
+                      className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-[2px] rounded-full bg-[var(--color-indigo)]"
+                      transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
+                    />
+                  ) : null}
+                </>
+              )}
             </NavLink>
           ))}
         </div>
