@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend (Go)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: akin
+          POSTGRES_PASSWORD: akin_dev
+          POSTGRES_DB: akin_test
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U akin -d akin_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://akin:akin_dev@localhost:55432/akin_test?sslmode=disable
+      REDIS_URL: redis://localhost:6379/0
+      APP_ENV: development
+      MOCK_TRANSFERS: "true"
+      SESSION_KEY: ci_session_key_for_tests_only_not_a_real_secret_xxxxxx
+      PAYSTACK_SECRET_KEY: sk_test_ci_placeholder
+      PAYSTACK_PUBLIC_KEY: pk_test_ci_placeholder
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test
+        run: go test -race -timeout 120s ./...
+
+  frontend:
+    name: Frontend (Vite + TS)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web/app
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+          cache-dependency-path: web/app/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build
+        run: pnpm build

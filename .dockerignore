@@ -1,0 +1,22 @@
+.git
+.github
+.idea
+.vscode
+.env
+.env.*
+!.env.example
+
+# Frontend — built separately
+web/
+
+# Local artifacts
+bin/
+dist/
+*.test
+*.out
+
+# Tooling
+docker-compose.yml
+docker-compose.*.yml
+README*
+*.md

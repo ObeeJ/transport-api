@@ -1,0 +1,76 @@
+# Production-shaped compose. Same shape as docker-compose.yml but:
+#   - the API runs from the built image, not `go run`
+#   - secrets come from a .env file you provision separately
+#   - host ports are not exposed (a reverse proxy in front handles TLS)
+#   - both DBs use named volumes with no host port bindings
+#
+# Use:
+#   docker compose -f docker-compose.prod.yml --env-file .env up -d
+#
+# Recommended deployment: put fly.io / Render / a single VM with Caddy or
+# nginx-proxy in front. The API listens on :8080 internally only.
+
+services:
+  api:
+    image: akin-api:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      APP_ENV: production
+      API_PORT: "8080"
+      DATABASE_URL: postgres://akin:${POSTGRES_PASSWORD}@postgres:5432/akin?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+      SESSION_COOKIE_NAME: akin_session
+      SESSION_TTL_HOURS: "720"
+      SESSION_KEY: ${SESSION_KEY}
+      PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY}
+      PAYSTACK_PUBLIC_KEY: ${PAYSTACK_PUBLIC_KEY}
+      API_BASE_URL: ${API_BASE_URL}
+      APP_BASE_URL: ${APP_BASE_URL}
+      CORS_ALLOWED_ORIGIN: ${APP_BASE_URL}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      EMAIL_FROM: ${EMAIL_FROM}
+      MOCK_TRANSFERS: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/api", "--health-check"] # falls back to TCP if unsupported
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: akin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: akin
+    volumes:
+      - akin_pg_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U akin -d akin"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - akin_redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  akin_pg_data:
+  akin_redis_data:

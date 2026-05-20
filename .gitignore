@@ -1,0 +1,31 @@
+# env
+.env
+.env.*
+!.env.example
+.env.local
+.env.*.local
+
+# Secrets / local certs
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Go build artifacts
+/bin/
+/dist/
+*.test
+*.out
+coverage/
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+*.log
+
+# Node (frontend handled by web/app/.gitignore)
+
+# Backups
+/backups/

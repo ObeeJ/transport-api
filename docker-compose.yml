@@ -1,0 +1,34 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: akin-postgres
+    environment:
+      POSTGRES_USER: akin
+      POSTGRES_PASSWORD: akin_dev
+      POSTGRES_DB: akin
+    ports:
+      - "55432:5432"
+    volumes:
+      - akin_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U akin -d akin"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: akin-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - akin_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  akin_pg_data:
+  akin_redis_data:
