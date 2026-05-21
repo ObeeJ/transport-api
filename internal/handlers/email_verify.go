@@ -22,7 +22,10 @@ func (h *EmailVerifyHandler) Send(c *fiber.Ctx) error {
 		return c.Status(401).JSON(fiber.Map{"error": "not_authenticated"})
 	}
 	if _, err := h.svc.IssueToken(c.Context(), user.ID); err != nil {
-		return fail(c, err, "issue_failed")
+		if err == service.ErrAlreadyVerified {
+			return c.Status(409).JSON(fiber.Map{"error": "already_verified"})
+		}
+		return c.Status(500).JSON(fiber.Map{"error": "email_send_failed"})
 	}
 	delivery := "email"
 	if !h.svc.EmailConfigured() {

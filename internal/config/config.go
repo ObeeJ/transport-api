@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -117,6 +118,8 @@ func (c *Config) EmailConfigured() bool {
 
 func env(key, fallback string) string {
 	if v, ok := os.LookupEnv(key); ok && v != "" {
+		// Strip surrounding quotes that some deployment platforms inject.
+		v = strings.Trim(v, `"'`)
 		return v
 	}
 	return fallback
