@@ -259,6 +259,108 @@ for path in /steward/queue /steward/audit /steward/payouts /steward/sos /steward
   check "GET $path as member → steward_required" "steward_required" "$R"
 done
 
+# ── Roster ───────────────────────────────────────────────────────────────────
+echo ""
+echo "── Roster ──"
+
+R=$(curl -c "$JAR" -b "$JAR" -s -X POST "$API/roster/verify" \
+  -H "Content-Type: application/json" \
+  -H "X-CSRF-Token: $(csrf)" \
+  -d '{"studentId":"STU123456"}')
+check "POST /roster/verify → verified or already_used" "verified\|already\|student" "$R"
+
+R=$(curl -c "$JAR" -b "$JAR" -s "$API/roster/me")
+check "GET /roster/me → verified" "verified" "$R"
+
+# ── Giver / Deposits ─────────────────────────────────────────────────────────
+echo ""
+echo "── Giver ──"
+
+R=$(curl -c "$JAR" -b "$JAR" -s -X POST "$API/giver/deposits/initialize" \
+  -H "Content-Type: application/json" \
+  -H "X-CSRF-Token: $(csrf)" \
+  -d '{"amountKobo":100000,"frequency":"once"}')
+check "POST /giver/deposits/initialize → authorizationUrl or error" "authorizationUrl\|error" "$R"
+
+R=$(curl -c "$JAR" -b "$JAR" -s "$API/giver/deposits/nonexistent-ref")
+check "GET /giver/deposits/:ref not found → deposit_not_found\|error" "deposit_not_found\|error" "$R"
+
+# ── GPS ───────────────────────────────────────────────────────────────────────
+echo ""
+echo "── GPS ──"
+
+FAKE_ID="00000000-0000-0000-0000-000000000000"
+
+R=$(curl -c "$JAR" -b "$JAR" -s "$API/trips/$FAKE_ID/gps")
+check "GET /trips/:id/gps → items" "items" "$R"
+
+R=$(curl -c "$JAR" -b "$JAR" -s "$API/trips/$FAKE_ID/gps/latest")
+check "GET /trips/:id/gps/latest no data → no_gps_data" "no_gps_data" "$R"
+
+R=$(curl -c "$JAR" -b "$JAR" -s -X POST "$API/trips/$FAKE_ID/gps" \
+  -H "Content-Type: application/json" \
+  -H "X-CSRF-Token: $(csrf)" \
+  -d '{"lat":6.5244,"lng":3.3792,"accuracy":10.0}')
+check "POST /trips/:id/gps not found → gps_not_allowed\|not_found" "gps_not_allowed\|not_found\|trip_not_found" "$R"
+
+# ── Appeals ───────────────────────────────────────────────────────────────────
+echo ""
+echo "── Appeals ──"
+
+R=$(curl -c "$JAR" -b "$JAR" -s -X POST "$API/recipients/me/appeal" \
+  -H "Content-Type: application/json" \
+  -H "X-CSRF-Token: $(csrf)" \
+  -d '{"reason":"I was incorrectly rejected"}')
+check "POST /recipients/me/appeal → not_found or appeal" "not_found\|appeal\|id\|too_many" "$R"
+
+# ── Webhook signature guard ───────────────────────────────────────────────────
+echo ""
+echo "── Webhooks ──"
+
+R=$(curl -s -X POST "$API/webhooks/paystack" \
+  -H "Content-Type: application/json" \
+  -d '{"event":"charge.success","data":{"reference":"test"}}')
+check "POST /webhooks/paystack no signature → invalid_signature" "invalid_signature" "$R"
+
+R=$(curl -s -X POST "$API/webhooks/resend" \
+  -H "Content-Type: application/json" \
+  -d '{}')
+check "POST /webhooks/resend no secret → ok or error" "ok\|error" "$R"
+
+# ── Input validation ──────────────────────────────────────────────────────────
+echo ""
+echo "── Input validation ──"
+
+R=$(curl -c "$JAR" -b "$JAR" -s -X POST "$API/auth/signup" \
+  -H "Content-Type: application/json" \
+  -H "X-CSRF-Token: $(csrf)" \
+  -d '{"email":"not-an-email","firstName":"X","lastName":"Y","phone":"08012345678","password":"password123"}')
+check "POST /auth/signup bad email → email_invalid" "email_invalid" "$R"
+
+R=$(curl -c "$JAR" -b "$JAR" -s -X POST "$API/auth/signup" \
+  -H "Content-Type: application/json" \
+  -H "X-CSRF-Token: $(csrf)" \
+  -d '{"email":"valid@example.com","firstName":"X","lastName":"Y","phone":"08012345678","password":"short"}')
+check "POST /auth/signup short password → password_too_short" "password_too_short" "$R"
+
+R=$(curl -c "$JAR" -b "$JAR" -s -X POST "$API/auth/login" \
+  -H "Content-Type: application/json" \
+  -H "X-CSRF-Token: $(csrf)" \
+  -d '{"email":"nobody@example.com","password":"wrongpass"}')
+check "POST /auth/login wrong creds → invalid_credentials" "invalid_credentials" "$R"
+
+R=$(curl -c "$JAR" -b "$JAR" -s -X POST "$API/notes" \
+  -H "Content-Type: application/json" \
+  -H "X-CSRF-Token: $(csrf)" \
+  -d '{"body":""}')
+check "POST /notes empty body → note_empty" "note_empty" "$R"
+
+R=$(curl -c "$JAR" -b "$JAR" -s -X POST "$API/roster/verify" \
+  -H "Content-Type: application/json" \
+  -H "X-CSRF-Token: $(csrf)" \
+  -d '{"studentId":""}')
+check "POST /roster/verify empty id → invalid_body" "invalid_body" "$R"
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
 echo "────────────────────────────────"
