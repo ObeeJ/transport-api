@@ -10,23 +10,36 @@ export class ApiError extends Error {
   }
 }
 
-function readCSRFToken(): string {
-  const match = document.cookie.match(/(?:^|;\s*)akin_csrf=([^;]+)/)
-  return match ? decodeURIComponent(match[1]) : ''
-}
-
 const STATE_CHANGING = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 
-// Fetch the CSRF cookie once on boot. The API sets it on any GET response.
-// Without this, the first POST from a fresh browser session has no cookie.
+// CSRF token store.
+//
+// We DON'T read `document.cookie` to get the token. Firefox Total Cookie
+// Protection and Chrome's third-party-cookie deprecation hide partitioned
+// cross-site cookies from JS — `document.cookie` returns empty even when
+// the cookie is happily sent on requests. So the token is fetched from
+// the API's JSON response body and kept in module memory.
+//
+// The cookie still travels with every request (the browser sends it
+// because of `credentials: 'include'` and SameSite=None;Partitioned).
+// Server-side, CSRF middleware compares the cookie against the
+// X-CSRF-Token header we set from this in-memory value.
+let csrfToken: string | null = null
 let csrfBootstrap: Promise<void> | null = null
 
-function ensureCSRF(): Promise<void> {
-  if (readCSRFToken()) return Promise.resolve()
+async function ensureCSRF(): Promise<void> {
+  if (csrfToken) return
   if (!csrfBootstrap) {
-    csrfBootstrap = fetch(`${API_BASE}/auth/csrf`, {
-      credentials: 'include',
-    }).then(() => {}).catch(() => {})
+    csrfBootstrap = fetch(`${API_BASE}/auth/csrf`, { credentials: 'include' })
+      .then((r) => r.json())
+      .then((data: { token?: string }) => {
+        if (data?.token) csrfToken = data.token
+      })
+      .catch(() => {
+        // Swallow — the next state-changing request will retry the bootstrap
+        // by virtue of csrfToken still being null.
+        csrfBootstrap = null
+      })
   }
   return csrfBootstrap
 }
@@ -34,7 +47,6 @@ function ensureCSRF(): Promise<void> {
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const method = (init.method ?? 'GET').toUpperCase()
 
-  // Ensure we have the CSRF cookie before any state-changing request.
   if (STATE_CHANGING.has(method)) {
     await ensureCSRF()
   }
@@ -43,9 +55,8 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     'Content-Type': 'application/json',
     ...((init.headers as Record<string, string>) ?? {}),
   }
-  if (STATE_CHANGING.has(method)) {
-    const csrf = readCSRFToken()
-    if (csrf) headers['X-CSRF-Token'] = csrf
+  if (STATE_CHANGING.has(method) && csrfToken) {
+    headers['X-CSRF-Token'] = csrfToken
   }
 
   const res = await fetch(`${API_BASE}${path}`, {
@@ -58,9 +69,16 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const text = await res.text()
   const data: unknown = text ? JSON.parse(text) : null
 
+  // If the server tells us the CSRF token is missing/mismatched, drop our
+  // cached one and let the next request re-fetch. Helps recover after
+  // server-side token rotation or cookie expiry without a full reload.
   if (!res.ok) {
     const body = data as { error?: string; detail?: string } | null
     const code = body?.error ?? `http_${res.status}`
+    if (res.status === 403 && (code === 'csrf_missing' || code === 'csrf_mismatch')) {
+      csrfToken = null
+      csrfBootstrap = null
+    }
     const message = body?.detail ?? body?.error ?? `Request failed (${res.status})`
     throw new ApiError(res.status, message, code)
   }

@@ -88,8 +88,9 @@ func itoaPositive(n int) string {
 // so it works as a cross-site cookie under modern browser privacy rules.
 func CSRFCookie(prod bool) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		if c.Cookies(csrfCookieName) == "" {
-			tok := newCSRFToken()
+		tok := c.Cookies(csrfCookieName)
+		if tok == "" {
+			tok = newCSRFToken()
 			sameSite := "Lax"
 			if prod {
 				sameSite = "None"
@@ -100,13 +101,21 @@ func CSRFCookie(prod bool) fiber.Handler {
 				Path:        "/",
 				SameSite:    sameSite,
 				Secure:      prod,
-				HTTPOnly:    false, // JS needs to read this
+				HTTPOnly:    false, // JS needs to read this (when document.cookie works)
 				Partitioned: prod,
 			})
 		}
+		// Store the effective token in Locals so /auth/csrf can return it in
+		// the JSON body. This is what the frontend reads on browsers where
+		// document.cookie can't see partitioned cross-site cookies.
+		c.Locals(CSRFLocalKey, tok)
 		return c.Next()
 	}
 }
+
+// CSRFLocalKey — c.Locals key holding the current request's CSRF token,
+// for handlers (like /auth/csrf) that need to echo it to the client.
+const CSRFLocalKey = "csrf_token"
 
 // CSRF — verifies that the value of X-CSRF-Token matches the akin_csrf
 // cookie. Safe methods (GET, HEAD, OPTIONS) skip the check.
