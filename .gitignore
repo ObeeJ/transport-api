@@ -12,6 +12,7 @@
 *.pfx
 
 # Go build artifacts
+/api
 /bin/
 /dist/
 *.test
