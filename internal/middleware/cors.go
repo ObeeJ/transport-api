@@ -11,6 +11,7 @@ func CORS(allowedOrigin string) fiber.Handler {
 		AllowMethods:     "GET,POST,PUT,PATCH,DELETE,OPTIONS",
 		AllowHeaders:     "Origin,Content-Type,Accept,Authorization,X-Requested-With,X-CSRF-Token",
 		AllowCredentials: true,
+		ExposeHeaders:    "X-CSRF-Token",
 		MaxAge:           600,
 	})
 }

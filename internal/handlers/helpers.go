@@ -12,14 +12,19 @@ import (
 )
 
 func setSessionCookie(c *fiber.Ctx, cfg *config.Config, token string, expires time.Time) {
+	prod := cfg.AppEnv == "production"
+	sameSite := "Lax"
+	if prod {
+		sameSite = "None"
+	}
 	c.Cookie(&fiber.Cookie{
 		Name:     cfg.SessionCookieName,
 		Value:    token,
 		Path:     "/",
 		Expires:  expires,
 		HTTPOnly: true,
-		SameSite: "Lax",
-		Secure:   cfg.AppEnv == "production",
+		SameSite: sameSite,
+		Secure:   prod,
 	})
 }
 
@@ -57,6 +62,7 @@ func httpErr(err error) (status int, code string) {
 		{service.ErrRecipientNotFound, 404, "recipient_not_found"},
 		{service.ErrRecipientNotApproved, 409, "not_approved"},
 		{service.ErrNoBankOnFile, 412, "no_bank_on_file"},
+		{service.ErrStewardCannotReceive, 403, "steward_cannot_receive"},
 		// steward
 		{service.ErrNotFound, 404, "not_found"},
 		{service.ErrAlreadyDecided, 409, "already_decided"},
