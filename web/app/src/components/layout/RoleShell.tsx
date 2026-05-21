@@ -1,9 +1,10 @@
+import { useEffect } from 'react'
 import { Outlet, NavLink, Link, useLocation } from 'react-router'
-import { AnimatePresence, motion } from 'motion/react'
+import { motion } from 'motion/react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth'
 import { useBreakpoint } from '@/lib/useBreakpoint'
-import { useRoles, roleLabels, roleRoutes, type Role } from '@/lib/useRoles'
+import { useRoles, roleLabels, roleRoutes, setActiveRole, getActiveRole, type Role } from '@/lib/useRoles'
 import { useSidebarCollapsed } from '@/lib/useSidebarCollapsed'
 
 // ─── Nav items per role ───────────────────────────────────────────────────────
@@ -177,6 +178,10 @@ export function RoleShell({ role }: { role: Role }) {
   const roles = useRoles()
   const location = useLocation()
   const [collapsed, setCollapsed] = useSidebarCollapsed()
+
+  // Remember the rail the user is currently on so shared pages (Account,
+  // Notifications) can restore it instead of always flipping to giver.
+  useEffect(() => { setActiveRole(role) }, [role])
 
   const isSteward = user?.role === 'steward' || user?.role === 'admin'
   const primaryNav = navForRole(role)
@@ -438,18 +443,30 @@ export function RoleShell({ role }: { role: Role }) {
           'flex-1 bg-[var(--color-cream)]',
           isMobile ? 'px-4 pt-5 pb-24' : bp === 'tablet' ? 'px-6 py-6' : 'px-[150px] py-8',
         )}>
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div
-              key={location.pathname}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.16, ease: [0.25, 0.1, 0.25, 1] }}
-              className={bp === 'desktop' ? 'max-w-[680px] mx-auto' : undefined}
-            >
-              <Outlet />
-            </motion.div>
-          </AnimatePresence>
+          {/*
+            Page transition wrapper.
+
+            Earlier we used <AnimatePresence mode="wait"> around <Outlet/>,
+            which caused a known footgun: React Router immediately swaps
+            the Outlet's content on navigation, but `mode="wait"` blocks
+            the new wrapper from mounting until the OLD wrapper finishes
+            its exit animation. During that gap, the new page's mount
+            effects could lose a race condition and render blank until a
+            manual refresh.
+
+            The Outlet now sits OUTSIDE AnimatePresence, so it always
+            mounts immediately on navigation. The motion.div is keyed on
+            the pathname and animates content in without blocking on
+            anything previous — no `mode="wait"`, no deadlock.
+          */}
+          <motion.div
+            key={location.pathname}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.16, ease: [0.25, 0.1, 0.25, 1] }}
+          >
+            <Outlet />
+          </motion.div>
         </main>
 
         {/* Mobile bottom nav */}
@@ -535,4 +552,12 @@ function MobileRoleSwitcher({ roles, current }: { roles: Role[]; current: Role }
       })}
     </div>
   )
+}
+
+// SharedRoleShell — used for routes that aren't bound to a single rail
+// (Account, Notifications, email verification). Reads the last role the
+// user was active in and renders the matching shell. Defaults to giver
+// for new sessions where no rail has been visited yet.
+export function SharedRoleShell() {
+  return <RoleShell role={getActiveRole()} />
 }

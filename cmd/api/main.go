@@ -111,12 +111,12 @@ func main() {
 	emailVerifySvc := service.NewEmailVerifyService(userRepo, notifySvc, mailer, cfg.AppBaseURL, gdb)
 	depositSvc := service.NewDepositService(depositRepo, recipientRepo, paymentProvider, cfg, notifySvc, gdb)
 	poolSvc := service.NewPoolService(depositRepo)
-	recipientSvc := service.NewRecipientService(recipientRepo, paymentProvider, gdb)
+	recipientSvc := service.NewRecipientService(recipientRepo, userRepo, paymentProvider, gdb)
 	stewardSvc := service.NewStewardService(stewardRepo, recipientRepo, notifySvc, gdb)
 	rideSvc := service.NewRideService(rideRepo, driverRepo, userRepo, seatHub, gdb)
 	driverSvc := service.NewDriverService(driverRepo, stewardRepo, rideRepo, notifySvc, gdb)
 	attendanceSvc := service.NewAttendanceService(attendanceRepo, userRepo, driverRepo, recipientRepo, gdb)
-	payoutSvc := service.NewPayoutService(payoutRepo, recipientRepo, stewardRepo, paymentProvider, walletSvc, notifySvc, attendanceSvc, cfg.MockTransfers, gdb)
+	payoutSvc := service.NewPayoutService(payoutRepo, recipientRepo, stewardRepo, userRepo, paymentProvider, walletSvc, notifySvc, attendanceSvc, cfg.MockTransfers, gdb)
 	rosterSvc := service.NewRosterService(rosterRepo, userRepo, gdb)
 	ratingSvc := service.NewRatingService(ratingRepo, impactRepo, rideRepo, notifySvc, gdb)
 	noteSvc := service.NewNoteService(noteRepo)
@@ -232,6 +232,9 @@ func main() {
 	app.Get("/wallet", authed, walletH.Balance)
 	app.Get("/wallet/transactions", authed, walletH.Transactions)
 	app.Post("/wallet/debit", authed, walletH.Debit)
+	// Recipient self-service withdrawal: wallet → bank. Rate-limited like
+	// other payment-initiating endpoints; auth + CSRF apply via middleware.
+	app.Post("/wallet/withdraw", authed, paymentLimit, payoutH.Withdraw)
 
 	// Driver
 	app.Post("/driver/apply", authed, driverH.Apply)
@@ -258,6 +261,7 @@ func main() {
 	app.Post("/trips/:id/sos", authed, sosH.Trigger)
 	app.Post("/trips/:id/gps", authed, gpsH.Record)
 	app.Get("/trips/:id/gps", authed, gpsH.Track)
+	app.Get("/trips/:id/gps/latest", authed, gpsH.Latest)
 	app.Get("/drive/trips", authed, ridesH.MyDriverTrips)
 	app.Get("/ride/bookings", authed, ridesH.MyRiderBookings)
 
@@ -281,7 +285,10 @@ func main() {
 	steward.Get("/audit", stewardH.Audit)
 	steward.Get("/recipients/approved", payoutH.ApprovedRecipients)
 	steward.Get("/payouts", payoutH.List)
+	steward.Get("/payouts/preview", payoutH.Preview)
 	steward.Post("/payouts", payoutH.Initiate)
+	steward.Post("/payouts/batch", payoutH.InitiateBatch)
+	steward.Post("/payouts/batch/:batchId/confirm", payoutH.ConfirmBatch)
 	steward.Post("/payouts/:id/confirm", payoutH.Confirm)
 	steward.Get("/drivers/queue", driverH.Queue)
 	steward.Post("/drivers/:id/decisions", driverH.Decide)
@@ -306,7 +313,8 @@ func main() {
 	app.Get("/pool/this-week", poolH.ThisWeek)
 
 	// Boot
-	rec := reconciler.New(gdb, 5*time.Minute)
+	weeklyCredit := reconciler.NewWeeklyCreditJob(recipientRepo, walletSvc, attendanceSvc, gdb)
+	rec := reconciler.New(gdb, 5*time.Minute).WithWeeklyCredit(weeklyCredit)
 	rec.Start()
 
 	go func() {

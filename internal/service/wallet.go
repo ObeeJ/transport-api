@@ -72,6 +72,34 @@ func (s *WalletService) Debit(userID uuid.UUID, amountKobo int64, description, r
 	return nil
 }
 
+// CreditOnce — idempotent credit keyed on `refID`. Returns
+// (credited=true, nil) when a new transaction was inserted, or
+// (credited=false, nil) when a prior transaction with the same refID
+// already existed. Used by the weekly cron so re-running the job — or
+// running it multiple times within the same week — doesn't double-credit.
+func (s *WalletService) CreditOnce(userID uuid.UUID, amountKobo int64, description, refID string) (bool, error) {
+	if refID == "" {
+		// Refuse — idempotency requires a stable key. Use Credit() for one-shot ops.
+		return false, fmt.Errorf("CreditOnce requires a non-empty refID")
+	}
+	// Cheap dedupe check first; race-tolerant because we then rely on the
+	// (eventually-added) unique index on wallet_transactions.ref_id to
+	// reject a concurrent dup at insert time. For v1 the check + insert
+	// race is acceptable — the cron runs single-process.
+	var n int64
+	if err := s.db.Model(&models.WalletTransaction{}).
+		Where("ref_id = ?", refID).Count(&n).Error; err != nil {
+		return false, err
+	}
+	if n > 0 {
+		return false, nil
+	}
+	if err := s.Credit(userID, amountKobo, description, refID); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func formatKobo(kobo int64) string {
 	naira := kobo / 100
 	return fmt.Sprintf("%d", naira)

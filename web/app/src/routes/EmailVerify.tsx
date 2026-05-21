@@ -29,7 +29,20 @@ export function EmailVerify() {
         className="pt-4"
       >
         <div className="card-base p-6 text-center">
-          <div className="text-3xl mb-3">✓</div>
+          <span
+            className="mx-auto mb-3 inline-flex items-center justify-center size-10 rounded-full"
+            style={{ background: 'rgba(94,114,89,0.12)' }}
+            aria-hidden
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="9" stroke="var(--color-moss)" strokeWidth="1.8" />
+              <path
+                d="M8 12.5l2.5 2.5L16 9.5"
+                stroke="var(--color-moss)" strokeWidth="2"
+                strokeLinecap="round" strokeLinejoin="round"
+              />
+            </svg>
+          </span>
           <div className="text-base font-medium text-[var(--color-moss)]">Email verified</div>
           <p className="mt-2 text-[12px] text-[var(--color-stone)]">
             {user?.email} is confirmed.

@@ -71,6 +71,10 @@ func (s *GPSService) TrackForTrip(tripID uuid.UUID) ([]models.TripGPSPoint, erro
 	return s.repo.ListForTrip(tripID)
 }
 
+func (s *GPSService) LatestForTrip(tripID uuid.UUID) (*models.TripGPSPoint, error) {
+	return s.repo.LatestForTrip(tripID)
+}
+
 // CheckPlausibility compares the GPS track against the declared hub origin.
 // If the driver has deviated beyond the threshold, an audit flag is raised.
 // This is a soft check — it never auto-cancels a trip.

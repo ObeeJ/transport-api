@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { motion } from 'motion/react'
+import maplibregl from 'maplibre-gl'
+import 'maplibre-gl/dist/maplibre-gl.css'
 import { api } from '@/lib/api'
 import { fadeUp, stagger, transition } from '@/lib/motion'
 
@@ -49,9 +51,6 @@ export function ActiveTrip() {
   }
 
   const { trip, hubName, bookedCount, driverName } = q.data
-  const arriving = trip.startedAt
-    ? new Date(new Date(trip.startedAt).getTime() + 15 * 60 * 1000)
-    : new Date(trip.departureAt)
 
   return (
     <motion.div
@@ -61,41 +60,16 @@ export function ActiveTrip() {
       className="pt-4"
     >
       <motion.div variants={fadeUp} transition={transition.default} className="card-base overflow-hidden">
-        <div
-          className="relative h-[280px]"
-          style={{
-            background:
-              'radial-gradient(circle at 30% 70%, rgba(217,119,87,0.12) 0, transparent 35%), radial-gradient(circle at 75% 30%, rgba(94,114,89,0.10) 0, transparent 30%), linear-gradient(180deg, #EBE2D2 0%, #E0D6C2 100%)',
-          }}
-        >
-          <svg viewBox="0 0 360 280" className="absolute inset-0 w-full h-full" preserveAspectRatio="none">
-            <path d="M-20 220 Q 100 200, 180 160 T 380 60" stroke="rgba(27,42,78,0.18)" strokeWidth="22" fill="none" strokeLinecap="round" />
-            <path d="M-20 220 Q 100 200, 180 160 T 380 60" stroke="#F5EFE6" strokeWidth="18" fill="none" strokeLinecap="round" />
-            <path d="M40 220 Q 130 200, 180 160 T 320 80" stroke="#D97757" strokeWidth="3" strokeDasharray="2 6" fill="none" strokeLinecap="round" />
-            <path d="M40 220 Q 110 205, 150 185" stroke="#1B2A4E" strokeWidth="3" fill="none" strokeLinecap="round" />
-            <circle cx="40" cy="220" r="9" fill="#F5EFE6" stroke="#1B2A4E" strokeWidth="2" />
-            <circle cx="150" cy="185" r="13" fill="#1B2A4E" />
-            <circle cx="150" cy="185" r="20" fill="none" stroke="#1B2A4E" strokeOpacity="0.25" strokeWidth="1.5" />
-            <circle cx="320" cy="80" r="11" fill="#D97757" />
-          </svg>
-
-          <div className="absolute top-4 left-4 right-4 card-base p-3 flex items-center justify-between bg-[var(--color-paper)]/85 backdrop-blur">
-            <div>
-              <div className="font-mono text-[10px] text-[var(--color-stone)]">
-                {trip.status === 'in_transit' ? 'ARRIVING' : 'DEPARTS'}
-              </div>
-              <div className="text-xl font-medium tracking-tight text-[var(--color-indigo)]">
-                {arriving.toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' })}
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="font-mono text-[10px] text-[var(--color-stone)]">DRIVER</div>
-              <div className="text-sm font-medium">
-                {driverName} {trip.vehiclePlate ? <span className="text-[var(--color-stone)] font-mono">· {trip.vehiclePlate}</span> : null}
-              </div>
-            </div>
-          </div>
-        </div>
+        <TripMap
+          tripId={trip.id}
+          status={trip.status}
+          hubName={hubName}
+          destination={trip.destination}
+          departureAt={trip.departureAt}
+          startedAt={trip.startedAt}
+          driverName={driverName}
+          vehiclePlate={trip.vehiclePlate}
+        />
 
         <div className="p-5">
           <div className="flex items-center justify-between">
@@ -131,6 +105,173 @@ export function ActiveTrip() {
         </Link>
       </motion.div>
     </motion.div>
+  )
+}
+
+type GPSPoint = { lat: number; lng: number; recordedAt: string }
+
+function TripMap({
+  tripId, status, hubName: _hubName, destination: _destination, departureAt, startedAt, driverName, vehiclePlate,
+}: {
+  tripId: string
+  status: string
+  hubName: string
+  destination: string
+  departureAt: string
+  startedAt?: string
+  driverName?: string
+  vehiclePlate?: string
+}) {
+  const mapRef = useRef<HTMLDivElement>(null)
+  const mapInstance = useRef<maplibregl.Map | null>(null)
+  const markerRef = useRef<maplibregl.Marker | null>(null)
+  const isLive = status === 'in_transit'
+
+  const arriving = startedAt
+    ? new Date(new Date(startedAt).getTime() + 15 * 60 * 1000)
+    : new Date(departureAt)
+
+  // Poll latest GPS point every 6s only when in_transit
+  const latest = useQuery<GPSPoint>({
+    queryKey: ['trip', tripId, 'gps', 'latest'],
+    queryFn: () => api.get(`/trips/${tripId}/gps/latest`),
+    refetchInterval: isLive ? 6000 : false,
+    enabled: isLive,
+    retry: false,
+  })
+
+  // Full track for the polyline — fetched once when live
+  const track = useQuery<{ items: GPSPoint[] }>({
+    queryKey: ['trip', tripId, 'gps'],
+    queryFn: () => api.get(`/trips/${tripId}/gps`),
+    enabled: isLive,
+    staleTime: 10_000,
+    retry: false,
+  })
+
+  // Initialise map once
+  useEffect(() => {
+    if (!mapRef.current || mapInstance.current) return
+    const map = new maplibregl.Map({
+      container: mapRef.current,
+      style: 'https://tiles.openfreemap.org/styles/liberty',
+      zoom: 14,
+      center: [3.3792, 6.5244], // Lagos default until GPS arrives
+      attributionControl: false,
+    })
+    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right')
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
+    mapInstance.current = map
+    return () => {
+      map.remove()
+      mapInstance.current = null
+    }
+  }, [])
+
+  // Draw polyline track when data arrives
+  useEffect(() => {
+    const map = mapInstance.current
+    if (!map || !track.data?.items.length) return
+    const coords = track.data.items.map(p => [p.lng, p.lat] as [number, number])
+    const onLoad = () => {
+      if (map.getSource('track')) {
+        (map.getSource('track') as maplibregl.GeoJSONSource).setData({
+          type: 'Feature',
+          properties: {},
+          geometry: { type: 'LineString', coordinates: coords },
+        })
+      } else {
+        map.addSource('track', {
+          type: 'geojson',
+          data: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: coords } },
+        })
+        map.addLayer({
+          id: 'track-line',
+          type: 'line',
+          source: 'track',
+          layout: { 'line-join': 'round', 'line-cap': 'round' },
+          paint: { 'line-color': '#1B2A4E', 'line-width': 3, 'line-opacity': 0.6 },
+        })
+      }
+    }
+    if (map.isStyleLoaded()) onLoad()
+    else map.once('load', onLoad)
+  }, [track.data])
+
+  // Move driver marker to latest point
+  useEffect(() => {
+    const map = mapInstance.current
+    if (!map || !latest.data) return
+    const { lat, lng } = latest.data
+    const lngLat: maplibregl.LngLatLike = [lng, lat]
+    if (markerRef.current) {
+      markerRef.current.setLngLat(lngLat)
+    } else {
+      const el = document.createElement('div')
+      el.className = 'trip-map-driver-dot'
+      el.style.cssText = [
+        'width:18px', 'height:18px', 'border-radius:50%',
+        'background:#1B2A4E', 'border:3px solid #FBF8F2',
+        'box-shadow:0 0 0 4px rgba(27,42,78,0.25)',
+        'animation:trip-map-pulse 1.8s ease-in-out infinite',
+      ].join(';')
+      markerRef.current = new maplibregl.Marker({ element: el })
+        .setLngLat(lngLat)
+        .addTo(map)
+    }
+    map.easeTo({ center: lngLat, duration: 800 })
+  }, [latest.data])
+
+  return (
+    <div className="relative">
+      {/* Map container */}
+      <div ref={mapRef} className="w-full h-[260px]" />
+
+      {/* Overlay info strip */}
+      <div className="absolute top-3 left-3 right-3 flex items-center justify-between">
+        <div className="card-base px-3 py-2 bg-[var(--color-paper)]/90 backdrop-blur flex items-center gap-2">
+          {isLive && <span className="size-2 rounded-full bg-[var(--color-moss)] animate-pulse shrink-0" />}
+          <div>
+            <div className="font-mono text-[10px] text-[var(--color-stone)]">
+              {isLive ? 'ARRIVING' : 'DEPARTS'}
+            </div>
+            <div className="text-[15px] font-semibold tracking-tight text-[var(--color-indigo)] leading-tight">
+              {arriving.toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' })}
+            </div>
+          </div>
+        </div>
+        <div className="card-base px-3 py-2 bg-[var(--color-paper)]/90 backdrop-blur text-right">
+          <div className="font-mono text-[10px] text-[var(--color-stone)]">DRIVER</div>
+          <div className="text-[13px] font-semibold text-[var(--color-indigo)] leading-tight">
+            {driverName ?? '—'}
+            {vehiclePlate ? <span className="text-[var(--color-stone)] font-mono text-[11px]"> · {vehiclePlate}</span> : null}
+          </div>
+        </div>
+      </div>
+
+      {/* No GPS yet notice */}
+      {isLive && !latest.data && !latest.isLoading && (
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 card-base px-3 py-1.5 bg-[var(--color-paper)]/90 backdrop-blur">
+          <p className="text-[10px] text-[var(--color-stone)] whitespace-nowrap">Waiting for driver location…</p>
+        </div>
+      )}
+
+      {/* Pre-transit placeholder */}
+      {!isLive && (
+        <div className="absolute inset-0 flex items-end justify-center pb-4 pointer-events-none">
+          <div className="card-base px-4 py-2 bg-[var(--color-paper)]/90 backdrop-blur">
+            <p className="text-[11px] text-[var(--color-stone)]">Live tracking starts when the trip is in transit</p>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes trip-map-pulse {
+          0%, 100% { box-shadow: 0 0 0 4px rgba(27,42,78,0.25); }
+          50% { box-shadow: 0 0 0 8px rgba(27,42,78,0.08); }
+        }
+      `}</style>
+    </div>
   )
 }
 

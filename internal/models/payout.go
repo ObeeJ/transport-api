@@ -37,8 +37,9 @@ func (b *RecipientBankAccount) BeforeCreate(_ *gorm.DB) error {
 //   succeeded         — Paystack delivered (via transfer.success webhook OR direct verify)
 //   failed | reversed — Paystack told us so
 type Payout struct {
-	ID                 uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
-	RecipientID        uuid.UUID  `gorm:"type:uuid;index;not null" json:"recipientId"`
+	ID                   uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	BatchID              *uuid.UUID `gorm:"type:uuid;index" json:"batchId,omitempty"`
+	RecipientID          uuid.UUID  `gorm:"type:uuid;index;not null" json:"recipientId"`
 	AmountKobo         int64      `gorm:"not null" json:"amountKobo"`
 	Status             string     `gorm:"not null;default:awaiting_confirm;index" json:"status"`
 	Reference          string     `gorm:"uniqueIndex;not null" json:"reference"`

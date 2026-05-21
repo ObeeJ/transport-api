@@ -17,6 +17,36 @@ func NewPayoutHandler(svc *service.PayoutService) *PayoutHandler {
 	return &PayoutHandler{svc: svc}
 }
 
+func (h *PayoutHandler) Preview(c *fiber.Ctx) error {
+	preview, err := h.svc.Preview()
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "preview_failed"})
+	}
+	return c.JSON(preview)
+}
+
+func (h *PayoutHandler) InitiateBatch(c *fiber.Ctx) error {
+	steward := middleware.CurrentUser(c)
+	batchID, count, err := h.svc.InitiateBatch(steward.ID)
+	if err != nil {
+		return fail(c, err, "batch_failed")
+	}
+	return c.Status(201).JSON(fiber.Map{"batchId": batchID, "count": count})
+}
+
+func (h *PayoutHandler) ConfirmBatch(c *fiber.Ctx) error {
+	steward := middleware.CurrentUser(c)
+	batchID, err := uuid.Parse(c.Params("batchId"))
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "invalid_batch_id"})
+	}
+	succeeded, err := h.svc.ConfirmBatch(c.Context(), batchID, steward.ID)
+	if err != nil {
+		return fail(c, err, "confirm_batch_failed")
+	}
+	return c.JSON(fiber.Map{"succeeded": succeeded})
+}
+
 func (h *PayoutHandler) Initiate(c *fiber.Ctx) error {
 	steward := middleware.CurrentUser(c)
 	var req struct {
@@ -77,6 +107,27 @@ func (h *PayoutHandler) List(c *fiber.Ctx) error {
 		nextCursor = items[len(items)-1].CreatedAt.Format(time.RFC3339Nano)
 	}
 	return c.JSON(fiber.Map{"items": items, "nextCursor": nextCursor})
+}
+
+// Withdraw — recipient-initiated payout from wallet to bank.
+// No steward in the path; the prior approval + the wallet balance are
+// the trust signals. See PayoutService.Withdraw for the full rationale.
+func (h *PayoutHandler) Withdraw(c *fiber.Ctx) error {
+	user := middleware.CurrentUser(c)
+	if user == nil {
+		return c.Status(401).JSON(fiber.Map{"error": "not_authenticated"})
+	}
+	var req struct {
+		AmountKobo int64 `json:"amountKobo"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "invalid_body"})
+	}
+	payout, err := h.svc.Withdraw(c.Context(), user.ID, req.AmountKobo)
+	if err != nil {
+		return fail(c, err, "withdrawal_failed")
+	}
+	return c.Status(201).JSON(payout)
 }
 
 func (h *PayoutHandler) ApprovedRecipients(c *fiber.Ctx) error {

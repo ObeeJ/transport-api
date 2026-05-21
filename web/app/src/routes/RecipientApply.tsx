@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router'
+import { useNavigate, Navigate } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'motion/react'
 import { ApiError, api } from '@/lib/api'
@@ -9,10 +9,7 @@ type Recipient = {
   id: string
   pseudonymousId: string
   status: 'pending' | 'approved' | 'declined'
-  disbursementMethod: 'wallet' | 'bank'
 }
-
-type Method = 'wallet' | 'bank'
 
 export function RecipientApply() {
   const navigate = useNavigate()
@@ -24,7 +21,6 @@ export function RecipientApply() {
 
   const [weeklyCost, setWeeklyCost] = useState('')
   const [situation, setSituation] = useState('')
-  const [method, setMethod] = useState<Method>('wallet')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -38,14 +34,20 @@ export function RecipientApply() {
     }
     setSubmitting(true)
     try {
+      // Disbursement method is no longer a user choice — approved
+      // recipients are always credited to their wallet, and they
+      // withdraw to their bank themselves.
       await api.post<Recipient>('/recipients/apply', {
         weeklyCostKobo: cost * 100,
         situation,
-        disbursementMethod: method,
       })
       navigate('/support/status', { replace: true })
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not submit. Try again.')
+      if (err instanceof ApiError && err.code === 'steward_cannot_receive') {
+        setError('Stewards can\'t also be recipients — that separation is enforced for trust reasons.')
+      } else {
+        setError(err instanceof ApiError ? err.message : 'Could not submit. Try again.')
+      }
       setSubmitting(false)
     }
   }
@@ -54,9 +56,14 @@ export function RecipientApply() {
     return <p className="pt-12 text-sm text-[var(--color-stone)]">Loading…</p>
   }
 
+  // Declarative redirect — calling navigate() during render fires a side
+  // effect from the render path, which can leave the screen blank until a
+  // manual refresh (the navigate happens, but the current render returns
+  // null in the meantime, and effect-driven router updates aren't
+  // guaranteed before paint). <Navigate /> is the supported React-Router
+  // way to redirect from a render path.
   if (!roster.data?.verified) {
-    navigate('/support/verify', { replace: true })
-    return null
+    return <Navigate to="/support/verify" replace />
   }
 
   return (
@@ -120,14 +127,15 @@ export function RecipientApply() {
         </motion.label>
 
         <motion.div variants={fadeUp} transition={transition.default} className="block">
-          <div className="label-cap mb-2">How you'd like to receive</div>
-          <div className="card-base p-1.5 flex">
-            <MethodBtn active={method === 'wallet'} onClick={() => setMethod('wallet')}>Mobile wallet</MethodBtn>
-            <MethodBtn active={method === 'bank'} onClick={() => setMethod('bank')}>Bank transfer</MethodBtn>
+          <div className="label-cap mb-2">How disbursements work</div>
+          <div className="card-base p-4 bg-[var(--color-cream)]">
+            <p className="text-[12px] text-[var(--color-ink)] leading-relaxed">
+              Each week we credit your <span className="font-medium">wallet</span> up to your weekly cap — based on attendance. You decide when to withdraw to your bank account from <span className="font-mono">Wallet → Withdraw</span>.
+            </p>
+            <p className="mt-2 text-[11px] text-[var(--color-stone)] leading-relaxed">
+              No one moves money on your behalf without your action. Stewards approve recipients and oversee the system — they never send funds directly to your bank.
+            </p>
           </div>
-          <p className="mt-1 text-[10px] text-[var(--color-stone)]">
-            You can change this later. Bank details are collected separately when stewards approve.
-          </p>
         </motion.div>
       </motion.div>
 
@@ -168,26 +176,3 @@ export function RecipientApply() {
   )
 }
 
-function MethodBtn({
-  active,
-  onClick,
-  children,
-}: {
-  active?: boolean
-  onClick: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <motion.button
-      type="button"
-      onClick={onClick}
-      whileTap={{ scale: 0.96 }}
-      transition={transition.fast}
-      className={`flex-1 text-xs py-2.5 rounded-[12px] font-medium transition-colors duration-150 ${
-        active ? 'bg-[var(--color-indigo)] text-[var(--color-paper)]' : 'text-[var(--color-stone)]'
-      }`}
-    >
-      {children}
-    </motion.button>
-  )
-}

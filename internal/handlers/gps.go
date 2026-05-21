@@ -67,3 +67,16 @@ func (h *GPSHandler) Track(c *fiber.Ctx) error {
 	}
 	return c.JSON(fiber.Map{"items": points})
 }
+
+// GET /trips/:id/gps/latest — latest single GPS point for live tracking.
+func (h *GPSHandler) Latest(c *fiber.Ctx) error {
+	tripID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "invalid_id"})
+	}
+	pt, err := h.svc.LatestForTrip(tripID)
+	if err != nil {
+		return c.Status(404).JSON(fiber.Map{"error": "no_gps_data"})
+	}
+	return c.JSON(pt)
+}

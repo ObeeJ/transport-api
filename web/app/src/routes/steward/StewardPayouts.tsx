@@ -1,24 +1,35 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { motion, AnimatePresence } from 'motion/react'
 import { ApiError, api } from '@/lib/api'
 import { StewardSubnav } from '@/components/StewardSubnav'
+import { fadeUp, stagger, transition } from '@/lib/motion'
+import { Link } from 'react-router'
 
-type ApprovedRecipient = {
-  id: string
+type BatchPreviewLine = {
+  recipientId: string
   pseudonymousId: string
-  weeklyCapKobo: number
-  hasBank: boolean
+  amountKobo: number
+  disbursementMethod: string
   bankName?: string
-  accountName?: string
+  eligible: boolean
+  skipReason?: 'absent_last_week' | 'no_attendance_record' | 'no_bank_on_file' | 'no_weekly_cap_set'
+}
+
+type BatchPreview = {
+  weekStart: string
+  lines: BatchPreviewLine[]
+  totalKobo: number
+  eligible: number
+  skipped: number
 }
 
 type Payout = {
   id: string
+  batchId?: string
   recipientId: string
   amountKobo: number
   status: 'awaiting_confirm' | 'pending' | 'succeeded' | 'failed' | 'reversed'
-  reference: string
-  paystackTransferCode?: string
   initiatedById: string
   confirmedById?: string
   failureReason?: string
@@ -26,264 +37,341 @@ type Payout = {
   settledAt?: string
 }
 
-function nairaFromKobo(k: number): string {
-  return '₦' + Math.round(k / 100).toLocaleString('en-NG')
+const SKIP_LABELS: Record<NonNullable<BatchPreviewLine['skipReason']>, { label: string; hint: string; color: string }> = {
+  absent_last_week:      { label: 'Absent',        hint: 'Marked absent in last week\'s attendance upload.',          color: 'var(--color-coral)' },
+  no_attendance_record:  { label: 'No record',     hint: 'No attendance data found for last week. Upload CSV first.', color: 'var(--color-clay)'  },
+  // Kept for backwards compatibility with older preview rows; new previews
+  // won't produce this skip reason since steward payouts go to wallet only.
+  no_bank_on_file:       { label: 'No bank (legacy)', hint: 'Bank-rail disbursement is retired. Recipient adds their own bank for withdrawals.', color: 'var(--color-stone)' },
+  no_weekly_cap_set:     { label: 'No cap set',    hint: 'Weekly cap is ₦0 — set it when approving.',                color: 'var(--color-stone)' },
 }
 
-function shortId(s: string): string {
-  return s.length > 12 ? s.slice(0, 8) + '…' : s
+const STATUS_MAP: Record<Payout['status'], { label: string; bg: string; fg: string; dot: string }> = {
+  awaiting_confirm: { label: 'Awaiting confirm', bg: 'rgba(217,119,87,0.12)', fg: 'var(--color-clay)',   dot: 'bg-[var(--color-clay)] animate-pulse'   },
+  pending:          { label: 'In flight',        bg: 'rgba(27,42,78,0.08)',   fg: 'var(--color-indigo)', dot: 'bg-[var(--color-indigo)] animate-pulse' },
+  succeeded:        { label: 'Succeeded',        bg: 'rgba(94,114,89,0.12)',  fg: 'var(--color-moss)',   dot: 'bg-[var(--color-moss)]'                 },
+  failed:           { label: 'Failed',           bg: 'rgba(200,75,58,0.10)',  fg: 'var(--color-coral)',  dot: 'bg-[var(--color-coral)]'                },
+  reversed:         { label: 'Reversed',         bg: 'rgba(200,75,58,0.10)',  fg: 'var(--color-coral)',  dot: 'bg-[var(--color-coral)]'                },
+}
+
+function naira(k: number) {
+  return '₦' + Math.round(k / 100).toLocaleString('en-NG')
 }
 
 export function StewardPayouts() {
   const qc = useQueryClient()
-  const approved = useQuery<{ items: ApprovedRecipient[] }>({
-    queryKey: ['steward', 'recipients', 'approved'],
-    queryFn: () => api.get('/steward/recipients/approved'),
+  const [error, setError] = useState<string | null>(null)
+
+  const preview = useQuery<BatchPreview>({
+    queryKey: ['steward', 'payouts', 'preview'],
+    queryFn: () => api.get('/steward/payouts/preview'),
+    staleTime: 60_000,
   })
+
   const payouts = useQuery<{ items: Payout[] }>({
     queryKey: ['steward', 'payouts'],
     queryFn: () => api.get('/steward/payouts'),
     refetchInterval: 8_000,
   })
 
-  // pseudonymousId lookup so we can show codes instead of UUIDs in the list
-  const pseudoLookup = useMemo(() => {
-    const m: Record<string, string> = {}
-    approved.data?.items.forEach((r) => {
-      m[r.id] = r.pseudonymousId
-    })
-    return m
-  }, [approved.data])
-
-  const [recipientId, setRecipientId] = useState('')
-  const [amountNaira, setAmountNaira] = useState('')
-  const [error, setError] = useState<string | null>(null)
-
-  const initiate = useMutation({
-    mutationFn: (input: { recipientId: string; amountKobo: number }) =>
-      api.post('/steward/payouts', input),
+  const initiateBatch = useMutation({
+    mutationFn: () => api.post<{ batchId: string; count: number }>('/steward/payouts/batch'),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['steward', 'payouts'] })
-      setAmountNaira('')
+      qc.invalidateQueries({ queryKey: ['steward', 'payouts', 'preview'] })
       setError(null)
     },
-    onError: (err) => {
-      setError(err instanceof ApiError ? err.message : 'Could not initiate.')
-    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Could not initiate batch.'),
   })
 
-  const confirm = useMutation({
-    mutationFn: (id: string) => api.post(`/steward/payouts/${id}/confirm`),
+  const confirmBatch = useMutation({
+    mutationFn: (id: string) => api.post<{ succeeded: number }>(`/steward/payouts/batch/${id}/confirm`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['steward', 'payouts'] })
+      setError(null)
     },
-    onError: (err) => {
-      setError(err instanceof ApiError ? err.message : 'Could not confirm.')
-    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Could not confirm batch.'),
   })
 
-  function onInitiate(e: React.FormEvent) {
-    e.preventDefault()
-    setError(null)
-    const naira = parseInt(amountNaira.replace(/[^\d]/g, ''), 10)
-    if (!recipientId) {
-      setError('Pick a recipient.')
-      return
-    }
-    if (!Number.isFinite(naira) || naira < 1) {
-      setError('Enter an amount.')
-      return
-    }
-    initiate.mutate({ recipientId, amountKobo: naira * 100 })
-  }
+  // Find the pending batch in the payout list
+  const pendingBatch = useMemo(() => {
+    const list = payouts.data?.items ?? []
+    const awaiting = list.filter(p => p.status === 'awaiting_confirm' && p.batchId)
+    if (awaiting.length === 0) return null
+    return awaiting[0].batchId!
+  }, [payouts.data])
+
+  const metrics = useMemo(() => {
+    const list = payouts.data?.items ?? []
+    const total = list.reduce((s, p) => s + (p.status === 'succeeded' ? p.amountKobo : 0), 0)
+    const pending = list.filter(p => p.status === 'awaiting_confirm' || p.status === 'pending').length
+    const failed = list.filter(p => p.status === 'failed').length
+    return { total, pending, failed }
+  }, [payouts.data])
+
+  const p = preview.data
 
   return (
-    <div>
+    <motion.div variants={stagger(0.07, 0.03)} initial="hidden" animate="show" className="space-y-5">
       <StewardSubnav />
 
-      <h1 className="text-3xl font-medium tracking-tight text-[var(--color-indigo)]">Payouts</h1>
-      <p className="mt-1 text-sm text-[var(--color-stone)]">
-        Two distinct stewards required. Any steward initiates; a different one confirms — the confirmation fires the Paystack Transfer.
-      </p>
+      {/* Header */}
+      <motion.div variants={fadeUp} transition={transition.default}>
+        <h1 className="text-[28px] font-medium tracking-tight text-[var(--color-indigo)]">Disburse to wallets</h1>
+        <p className="mt-1 text-[12px] text-[var(--color-stone)]">
+          Stewards credit approved recipients' wallets — never bank accounts directly. Recipients withdraw to their own bank from <span className="font-mono">Wallet → Withdraw</span>. Two stewards still required: one initiates, a different one confirms.
+        </p>
+        <p className="mt-2 text-[11px] text-[var(--color-stone)]">
+          The weekly auto-credit job covers the routine case. Use this page for one-off manual disbursements: corrections, advances, exceptions.
+        </p>
+      </motion.div>
 
-      {/* Initiate form */}
-      <section className="mt-6 card-base p-5">
-        <div className="label-cap">Initiate a new payout</div>
+      {/* Metrics */}
+      <motion.div variants={fadeUp} transition={transition.default} className="grid grid-cols-3 gap-3">
+        {[
+          { label: 'Total disbursed', value: naira(metrics.total), color: 'var(--color-moss)', bg: 'rgba(94,114,89,0.06)' },
+          { label: 'Pending action',  value: metrics.pending, color: metrics.pending > 0 ? 'var(--color-clay)' : 'var(--color-stone)', bg: metrics.pending > 0 ? 'rgba(217,119,87,0.06)' : 'transparent' },
+          { label: 'Failed',          value: metrics.failed,  color: metrics.failed > 0  ? 'var(--color-coral)' : 'var(--color-stone)', bg: metrics.failed > 0  ? 'rgba(200,75,58,0.06)'  : 'transparent' },
+        ].map(({ label, value, color, bg }) => (
+          <div key={label} className="card-base p-4" style={{ background: bg }}>
+            <div className="label-cap mb-1">{label}</div>
+            <div className="text-[26px] font-semibold tracking-tight leading-none" style={{ color }}>
+              {payouts.isLoading ? <span className="inline-block w-16 h-6 rounded bg-[var(--color-cream-2)] animate-pulse" /> : value}
+            </div>
+          </div>
+        ))}
+      </motion.div>
 
-        {(() => {
-          const items = approved.data?.items ?? []
-          const ready = items.filter((r) => r.hasBank)
-          const waitingOnBank = items.filter((r) => !r.hasBank)
+      {/* Batch preview */}
+      <motion.div variants={fadeUp} transition={transition.default} className="card-base overflow-hidden">
+        <div className="px-5 pt-5 pb-4 border-b border-[var(--color-hairline)] flex items-center justify-between">
+          <div>
+            <div className="label-cap">This week's payout run</div>
+            <p className="mt-0.5 text-[12px] text-[var(--color-stone)]">
+              {preview.isLoading
+                ? 'Calculating…'
+                : p
+                  ? `Week of ${p.weekStart} · ${p.eligible} eligible · ${p.skipped} skipped`
+                  : 'No approved recipients yet'}
+            </p>
+          </div>
+          {p && (
+            <div className="text-right shrink-0">
+              <div className="text-[22px] font-semibold tracking-tight text-[var(--color-moss)]">{naira(p.totalKobo)}</div>
+              <div className="text-[10px] text-[var(--color-stone)]">total to disburse</div>
+            </div>
+          )}
+        </div>
 
-          if (approved.isLoading) {
-            return <p className="mt-3 text-sm text-[var(--color-stone)]">Loading recipients…</p>
-          }
-          if (items.length === 0) {
-            return (
-              <p className="mt-3 text-sm text-[var(--color-stone)]">
-                No approved recipients yet. Approvals happen on the{' '}
-                <a href="/steward" className="underline underline-offset-[3px] text-[var(--color-ink)]">
-                  Queue
-                </a>{' '}
-                — and need two distinct stewards.
-              </p>
-            )
-          }
-          if (ready.length === 0) {
-            return (
-              <div className="mt-3 text-sm text-[var(--color-stone)]">
-                <p>
-                  No recipient has added a bank account yet. Until they do, payouts can't go out.
-                </p>
-                <div className="mt-3 card-base p-3 bg-[var(--color-cream)]">
-                  <div className="label-cap mb-1">Waiting on a bank account</div>
-                  <ul className="font-mono text-[12px] text-[var(--color-indigo)] space-y-0.5">
-                    {waitingOnBank.map((r) => (
-                      <li key={r.id}>{r.pseudonymousId}</li>
-                    ))}
-                  </ul>
+        {/* Preview lines */}
+        <div className="divide-y divide-[var(--color-hairline)]">
+          {preview.isLoading
+            ? Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="px-5 py-3.5 flex items-center gap-3 animate-pulse">
+                  <div className="size-2 rounded-full bg-[var(--color-cream-2)] shrink-0" />
+                  <div className="flex-1 h-3 rounded bg-[var(--color-cream-2)]" />
+                  <div className="w-16 h-3 rounded bg-[var(--color-cream-2)]" />
                 </div>
-                <p className="mt-3 text-[11px]">
-                  Each approved recipient adds their own bank in{' '}
-                  <span className="font-mono text-[var(--color-ink)]">/support/bank</span>. Nudge them — you can't add it for them.
+              ))
+            : p?.lines.length === 0
+              ? (
+                <div className="px-5 py-8 text-center">
+                  <p className="text-[13px] font-medium text-[var(--color-indigo)]">No approved recipients yet</p>
+                  <p className="mt-1 text-[11px] text-[var(--color-stone)]">
+                    Recipients need two steward sign-offs on the <a href="/steward" className="underline underline-offset-2">Queue</a> before they appear here.
+                  </p>
+                </div>
+              )
+              : p?.lines.map((line, i) => {
+                const skip = line.skipReason ? SKIP_LABELS[line.skipReason] : null
+                return (
+                  <motion.div
+                    key={line.recipientId}
+                    initial={{ opacity: 0, x: -4 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ ...transition.fast, delay: i * 0.02 }}
+                    className="px-5 py-3.5 flex items-center gap-3"
+                  >
+                    {/* Eligible dot */}
+                    <span className={`size-2 rounded-full shrink-0 ${line.eligible ? 'bg-[var(--color-moss)]' : 'bg-[var(--color-hairline)]'}`} />
+
+                    {/* Pseudonymous ID */}
+                    <span className="font-mono text-[13px] font-semibold text-[var(--color-indigo)] w-16 shrink-0">
+                      {line.pseudonymousId}
+                    </span>
+
+                    {/* Disbursement destination — always wallet now */}
+                    <span className="text-[10px] font-mono text-[var(--color-stone)] bg-[var(--color-cream-2)] px-2 py-0.5 rounded-full shrink-0">
+                      wallet
+                    </span>
+
+                    {/* Skip reason */}
+                    {skip && (
+                      <span
+                        className="text-[10px] font-medium px-2 py-0.5 rounded-full"
+                        style={{ background: `color-mix(in srgb, ${skip.color} 10%, transparent)`, color: skip.color }}
+                        title={skip.hint}
+                      >
+                        {skip.label}
+                      </span>
+                    )}
+                    {skip && (
+                      <span className="text-[10px] text-[var(--color-stone)] truncate hidden sm:block">{skip.hint}</span>
+                    )}
+
+                    {/* Amount */}
+                    <span className={`ml-auto font-mono text-[13px] font-semibold shrink-0 ${line.eligible ? 'text-[var(--color-indigo)]' : 'text-[var(--color-stone-soft)] line-through'}`}>
+                      {naira(line.amountKobo)}
+                    </span>
+                  </motion.div>
+                )
+              })}
+        </div>
+
+        {/* Actions */}
+        <div className="px-5 py-4 border-t border-[var(--color-hairline)] bg-[var(--color-cream)]/60 flex items-center gap-3 flex-wrap">
+          {pendingBatch ? (
+            <>
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <span className="size-2 rounded-full bg-[var(--color-clay)] animate-pulse shrink-0" />
+                <p className="text-[12px] text-[var(--color-clay)] font-medium">
+                  A batch is awaiting your confirmation — you must be a different steward from the one who initiated it.
                 </p>
               </div>
-            )
-          }
-          return (
-            <>
-              <form onSubmit={onInitiate} className="mt-3 grid grid-cols-12 gap-3">
-                <div className="col-span-7">
-                  <label className="text-[11px] text-[var(--color-stone)]">Recipient</label>
-                  <select
-                    value={recipientId}
-                    onChange={(e) => setRecipientId(e.target.value)}
-                    className="mt-1 w-full bg-[var(--color-cream)] border border-[var(--color-hairline)] rounded-[12px] px-3 h-11 text-sm"
-                  >
-                    <option value="">— pick a recipient —</option>
-                    {ready.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.pseudonymousId}
-                        {r.weeklyCapKobo ? ` · cap ${nairaFromKobo(r.weeklyCapKobo)}/wk` : ''}
-                        {r.bankName ? ` · ${r.bankName}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="col-span-3">
-                  <label className="text-[11px] text-[var(--color-stone)]">Amount (₦)</label>
-                  <input
-                    inputMode="numeric"
-                    placeholder="0"
-                    value={amountNaira}
-                    onChange={(e) => setAmountNaira(e.target.value.replace(/[^\d]/g, ''))}
-                    className="mt-1 w-full bg-[var(--color-cream)] border border-[var(--color-hairline)] rounded-[12px] px-3 h-11 text-sm font-mono"
-                  />
-                </div>
-                <div className="col-span-2 flex items-end">
-                  <button
-                    type="submit"
-                    disabled={initiate.isPending}
-                    className="w-full h-11 rounded-[12px] bg-[var(--color-indigo)] text-[var(--color-paper)] text-sm font-medium"
-                  >
-                    {initiate.isPending ? '…' : 'Initiate'}
-                  </button>
-                </div>
-              </form>
-              {waitingOnBank.length > 0 ? (
-                <p className="mt-3 text-[11px] text-[var(--color-stone)]">
-                  {waitingOnBank.length} approved recipient{waitingOnBank.length === 1 ? '' : 's'} not shown — still waiting on a bank account from them.
-                </p>
-              ) : null}
-              {error ? <p className="mt-3 text-[12px] text-[var(--color-coral)]" role="alert">{error}</p> : null}
-              <p className="mt-3 text-[11px] text-[var(--color-stone)]">
-                You cannot confirm a payout you initiated yourself.
-              </p>
+              <motion.button
+                whileTap={{ scale: 0.97 }}
+                onClick={() => confirmBatch.mutate(pendingBatch)}
+                disabled={confirmBatch.isPending}
+                className="btn-primary h-10 px-5 text-sm shrink-0 disabled:opacity-40"
+                style={{ background: 'linear-gradient(135deg, var(--color-moss) 0%, #465543 100%)' }}
+              >
+                {confirmBatch.isPending ? 'Confirming…' : `Confirm batch`}
+              </motion.button>
             </>
-          )
-        })()}
-      </section>
+          ) : (
+            <>
+              {p && p.eligible === 0 ? (
+                <div className="flex items-start gap-2.5 flex-1">
+                  <span className="text-[var(--color-stone)] text-[13px] shrink-0">ℹ</span>
+                  <div>
+                    <p className="text-[12px] text-[var(--color-stone)]">No eligible recipients this week.</p>
+                    <p className="text-[11px] text-[var(--color-stone)] mt-0.5">
+                      Check attendance records or{' '}
+                      <Link to="/steward/attendance" className="underline underline-offset-2 text-[var(--color-indigo)]">
+                        upload this week's CSV
+                      </Link>.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {!p || preview.isLoading ? (
+                    <p className="text-[11px] text-[var(--color-stone)] flex-1">Calculating eligible recipients…</p>
+                  ) : p.lines.length === 0 ? (
+                    <p className="text-[11px] text-[var(--color-stone)] flex-1">
+                      No recipients to pay out yet. Approve applications on the{' '}
+                      <Link to="/steward" className="underline underline-offset-2 text-[var(--color-indigo)]">Queue</Link>{' '}
+                      first.
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-[var(--color-stone)] flex-1">
+                      This will create {p.eligible} payout record{p.eligible !== 1 ? 's' : ''} totalling {naira(p.totalKobo)}. A second steward must confirm before any money moves.
+                    </p>
+                  )}
+                  <motion.button
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => initiateBatch.mutate()}
+                    disabled={initiateBatch.isPending || !p || p.eligible === 0}
+                    className="btn-primary h-10 px-5 text-sm shrink-0 disabled:opacity-40"
+                  >
+                    {initiateBatch.isPending ? 'Initiating…' : 'Initiate batch'}
+                  </motion.button>
+                </>
+              )}
+            </>
+          )}
 
-      {/* Payouts list */}
-      <section className="mt-6 card-base overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-[var(--color-cream)] text-left text-[10px] uppercase tracking-wider text-[var(--color-stone)]">
-            <tr>
-              <th className="px-4 py-3 font-medium">Recipient</th>
-              <th className="px-4 py-3 font-medium text-right">Amount</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 font-medium">Initiated</th>
-              <th className="px-4 py-3 font-medium"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {payouts.isLoading ? (
-              <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-[var(--color-stone)]">Loading…</td>
-              </tr>
-            ) : (payouts.data?.items ?? []).length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-4 py-12 text-center text-[var(--color-stone)]">
-                  No payouts yet.
-                </td>
-              </tr>
-            ) : (
-              payouts.data?.items.map((p) => (
-                <tr key={p.id} className="border-t border-[var(--color-hairline)]">
-                  <td className="px-4 py-3 font-mono text-[var(--color-indigo)]">
-                    {pseudoLookup[p.recipientId] ?? shortId(p.recipientId)}
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono">{nairaFromKobo(p.amountKobo)}</td>
-                  <td className="px-4 py-3">
-                    <StatusPill status={p.status} />
-                    {p.failureReason ? (
-                      <div className="text-[10px] text-[var(--color-coral)] mt-1">{p.failureReason}</div>
-                    ) : null}
-                  </td>
-                  <td className="px-4 py-3 text-[var(--color-stone)] text-xs font-mono">
-                    {new Date(p.createdAt).toLocaleString('en-NG', {
-                      day: '2-digit',
-                      month: 'short',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {p.status === 'awaiting_confirm' ? (
-                      <button
-                        onClick={() => confirm.mutate(p.id)}
-                        disabled={confirm.isPending}
-                        className="text-xs font-medium px-3 py-1.5 rounded-md bg-[var(--color-indigo)] text-[var(--color-paper)]"
-                      >
-                        Confirm
-                      </button>
-                    ) : null}
-                  </td>
-                </tr>
-              ))
+          <AnimatePresence>
+            {error && (
+              <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="w-full text-[12px] text-[var(--color-coral)]"
+              >
+                {error}
+              </motion.p>
             )}
-          </tbody>
-        </table>
-      </section>
-    </div>
-  )
-}
+          </AnimatePresence>
+        </div>
+      </motion.div>
 
-function StatusPill({ status }: { status: Payout['status'] }) {
-  const map: Record<Payout['status'], { label: string; bg: string; fg: string }> = {
-    awaiting_confirm: { label: 'awaiting confirm', bg: 'rgba(217,119,87,0.15)', fg: 'var(--color-clay)' },
-    pending: { label: 'in flight', bg: 'rgba(27,42,78,0.10)', fg: 'var(--color-indigo)' },
-    succeeded: { label: 'succeeded', bg: 'rgba(94,114,89,0.15)', fg: 'var(--color-moss)' },
-    failed: { label: 'failed', bg: 'rgba(200,75,58,0.15)', fg: 'var(--color-coral)' },
-    reversed: { label: 'reversed', bg: 'rgba(200,75,58,0.15)', fg: 'var(--color-coral)' },
-  }
-  const s = map[status]
-  return (
-    <span
-      className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium uppercase tracking-wider"
-      style={{ background: s.bg, color: s.fg }}
-    >
-      {s.label}
-    </span>
+      {/* Payout history feed */}
+      <motion.div variants={fadeUp} transition={transition.default} className="space-y-2">
+        <div className="flex items-center justify-between px-1">
+          <div className="label-cap">Payout history</div>
+          {payouts.isFetching && <span className="size-1.5 rounded-full bg-[var(--color-moss)] animate-pulse" />}
+        </div>
+
+        {payouts.isLoading
+          ? Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="card-base p-4 flex items-center gap-4 animate-pulse">
+                <div className="size-2 rounded-full bg-[var(--color-cream-2)] shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3 w-1/4 rounded bg-[var(--color-cream-2)]" />
+                  <div className="h-2.5 w-1/3 rounded bg-[var(--color-cream-2)]" />
+                </div>
+                <div className="h-4 w-16 rounded bg-[var(--color-cream-2)]" />
+              </div>
+            ))
+          : (payouts.data?.items ?? []).length === 0
+            ? <div className="card-base p-8 text-center"><p className="text-[13px] text-[var(--color-stone)]">No payouts yet.</p></div>
+            : payouts.data?.items.map((p, i) => {
+                const s = STATUS_MAP[p.status]
+                return (
+                  <motion.div
+                    key={p.id}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ ...transition.fast, delay: i * 0.03 }}
+                    className="card-base overflow-hidden"
+                  >
+                    <div className="flex items-center gap-3 px-4 py-3.5">
+                      <span className={`size-2 rounded-full shrink-0 ${s.dot}`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono text-[13px] font-semibold text-[var(--color-indigo)]">
+                            {/* We only have recipientId here — pseudonymous ID not in payout model */}
+                            {p.recipientId.slice(0, 8)}…
+                          </span>
+                          {p.batchId && (
+                            <span className="text-[9px] font-mono text-[var(--color-stone)] bg-[var(--color-cream-2)] px-1.5 py-0.5 rounded">
+                              batch
+                            </span>
+                          )}
+                          <span
+                            className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                            style={{ background: s.bg, color: s.fg }}
+                          >
+                            {s.label}
+                          </span>
+                        </div>
+                        {p.failureReason && (
+                          <p className="mt-0.5 text-[10px] text-[var(--color-coral)] leading-snug truncate">{p.failureReason}</p>
+                        )}
+                      </div>
+                      <span className="font-mono text-[15px] font-semibold text-[var(--color-indigo)] shrink-0">
+                        {naira(p.amountKobo)}
+                      </span>
+                      <span className="text-[10px] font-mono text-[var(--color-stone-soft)] shrink-0 hidden sm:block">
+                        {new Date(p.createdAt).toLocaleString('en-NG', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  </motion.div>
+                )
+              })
+        }
+      </motion.div>
+    </motion.div>
   )
 }

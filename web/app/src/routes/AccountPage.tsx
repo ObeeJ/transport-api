@@ -20,7 +20,7 @@ export function AccountPage() {
       variants={stagger(0.07, 0.04)}
       initial="hidden"
       animate="show"
-      className="space-y-4 max-w-lg"
+      className="space-y-4"
     >
       {/* Header */}
       <motion.div variants={fadeUp} transition={transition.default}>

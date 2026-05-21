@@ -47,7 +47,7 @@ export function TransparencyReport() {
       variants={stagger(0.07, 0.04)}
       initial="hidden"
       animate="show"
-      className="space-y-4 max-w-lg"
+      className="space-y-4"
     >
       {/* Header */}
       <motion.div variants={fadeUp} transition={transition.default}>
@@ -116,7 +116,13 @@ export function TransparencyReport() {
             <div className="label-cap mb-2">Class attendance</div>
             {r.bucketSuppressed ? (
               <div className="flex items-start gap-3">
-                <span className="text-[20px] shrink-0">🔒</span>
+                <span
+                  className="shrink-0 inline-flex items-center justify-center size-8 rounded-[10px]"
+                  style={{ background: 'rgba(27,42,78,0.06)' }}
+                  aria-hidden
+                >
+                  <LockIcon />
+                </span>
                 <div>
                   <p className="text-[13px] font-medium text-[var(--color-indigo)]">Data hidden this period</p>
                   <p className="mt-1 text-[12px] text-[var(--color-stone)] leading-relaxed">
@@ -141,10 +147,10 @@ export function TransparencyReport() {
             <div className="px-5 pt-4 pb-1">
               <div className="label-cap mb-4">Ride network</div>
               <div className="grid grid-cols-2 gap-4">
-                <Stat label="Trips completed" value={String(r.tripsCompleted)} />
-                <Stat label="Seats donated" value={String(r.seatsDonated)} />
-                <Stat label="Drivers" value={String(r.uniqueDrivers)} tone="stone" />
-                <Stat label="Commuters" value={String(r.uniqueCommuters)} tone="stone" />
+                <Stat label="Trips completed" value={String(r.tripsCompleted ?? 0)} />
+                <Stat label="Seats donated" value={String(r.seatsDonated ?? 0)} />
+                <Stat label="Drivers" value={String(r.uniqueDrivers ?? 0)} tone="stone" />
+                <Stat label="Commuters" value={String(r.uniqueCommuters ?? 0)} tone="stone" />
               </div>
             </div>
             <div className="h-4" />
@@ -171,5 +177,24 @@ function Stat({ label, value, tone = 'indigo' }: { label: string; value: string;
       <p className="text-[11px] text-[var(--color-stone)] uppercase tracking-wider">{label}</p>
       <p className="mt-1 text-[24px] font-medium tracking-tight" style={{ color }}>{value}</p>
     </div>
+  )
+}
+
+// Inline two-tone lock — matches NotificationsPage's icon grammar so the
+// "suppressed by privacy bucket" cue feels native to the app.
+function LockIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect
+        x="4" y="11" width="16" height="10" rx="2"
+        stroke="var(--color-indigo)" strokeWidth="1.8"
+        fill="rgba(217,119,87,0.10)"
+      />
+      <path
+        d="M8 11V8a4 4 0 0 1 8 0v3"
+        stroke="var(--color-indigo)" strokeWidth="1.8" strokeLinecap="round"
+      />
+      <circle cx="12" cy="16" r="1.2" fill="var(--color-clay)" />
+    </svg>
   )
 }

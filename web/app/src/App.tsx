@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router'
-import { RoleShell } from '@/components/layout/RoleShell'
+import { RoleShell, SharedRoleShell } from '@/components/layout/RoleShell'
 import { RequireAuth } from '@/components/RequireAuth'
 import { RequireSteward } from '@/components/RequireSteward'
 import { StewardShell } from '@/components/layout/StewardShell'
@@ -90,8 +90,8 @@ export default function App() {
           <Route path="/drive/apply" element={<DriverApply />} />
         </Route>
 
-        {/* ── Account (shared — uses giver shell as base) ── */}
-        <Route element={<RoleShell role="giver" />}>
+        {/* ── Shared (preserves the rail the user came from) ── */}
+        <Route element={<SharedRoleShell />}>
           <Route path="/account" element={<AccountPage />} />
           <Route path="/account/verify-email" element={<EmailVerify />} />
           <Route path="/notifications" element={<NotificationsPage />} />

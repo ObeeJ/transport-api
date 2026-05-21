@@ -8,15 +8,25 @@ import (
 	"gorm.io/gorm"
 )
 
-// Reconciler sweeps stale data on a fixed interval.
+// Reconciler sweeps stale data on a fixed interval and runs any attached
+// background jobs (e.g., weekly wallet credits).
 type Reconciler struct {
 	db       *gorm.DB
 	interval time.Duration
 	cancel   context.CancelFunc
+
+	weeklyCredit *WeeklyCreditJob
 }
 
 func New(db *gorm.DB, interval time.Duration) *Reconciler {
 	return &Reconciler{db: db, interval: interval}
+}
+
+// WithWeeklyCredit attaches the approved-recipient weekly credit job.
+// Optional — if not wired, the reconciler still runs the other sweeps.
+func (r *Reconciler) WithWeeklyCredit(j *WeeklyCreditJob) *Reconciler {
+	r.weeklyCredit = j
+	return r
 }
 
 func (r *Reconciler) Start() {
@@ -51,6 +61,9 @@ func (r *Reconciler) run() {
 	r.expireStalePendingPayouts()
 	r.cancelPastDepartureTrips()
 	r.deleteExpiredSessions()
+	if r.weeklyCredit != nil {
+		r.weeklyCredit.Run()
+	}
 }
 
 // Deposits pending > 2 hours → failed.

@@ -16,6 +16,21 @@ func (r *PayoutRepo) Create(p *models.Payout) error {
 	return r.db.Create(p).Error
 }
 
+func (r *PayoutRepo) CreateBatch(payouts []*models.Payout) error {
+	return r.db.Create(&payouts).Error
+}
+
+func (r *PayoutRepo) ListByBatch(batchID uuid.UUID) ([]models.Payout, error) {
+	var items []models.Payout
+	return items, r.db.Where("batch_id = ?", batchID).Order("created_at asc").Find(&items).Error
+}
+
+func (r *PayoutRepo) ConfirmBatch(batchID uuid.UUID, stewardID uuid.UUID) error {
+	return r.db.Model(&models.Payout{}).
+		Where("batch_id = ? AND status = ?", batchID, "awaiting_confirm").
+		Updates(map[string]any{"confirmed_by_id": stewardID}).Error
+}
+
 func (r *PayoutRepo) FindByID(id uuid.UUID) (*models.Payout, error) {
 	var p models.Payout
 	return &p, r.db.First(&p, "id = ?", id).Error
