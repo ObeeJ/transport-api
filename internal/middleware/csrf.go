@@ -21,12 +21,16 @@ func CSRFCookie(prod bool) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		if c.Cookies(csrfCookieName) == "" {
 			tok := newCSRFToken()
+			sameSite := "Lax"
+			if prod {
+				sameSite = "None"
+			}
 			c.Cookie(&fiber.Cookie{
 				Name:     csrfCookieName,
 				Value:    tok,
 				Path:     "/",
 				HTTPOnly: false, // JS needs to read this
-				SameSite: "Lax",
+				SameSite: sameSite,
 				Secure:   prod,
 			})
 		}
