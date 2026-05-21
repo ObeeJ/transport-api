@@ -66,7 +66,9 @@ func (s *EmailVerifyService) IssueToken(ctx context.Context, userID uuid.UUID) (
 
 	if s.mailer != nil && s.mailer.Configured() {
 		// Real email with a click-to-verify link.
-		_ = s.mailer.SendVerification(ctx, user.Email, token, s.appBaseURL)
+		if err := s.mailer.SendVerification(ctx, user.Email, token, s.appBaseURL); err != nil {
+			return "", err
+		}
 	} else {
 		// Dev fallback: log to server only. Never expose the token in the UI.
 		slog.Warn("email not configured — verification token logged to server only",
@@ -77,6 +79,10 @@ func (s *EmailVerifyService) IssueToken(ctx context.Context, userID uuid.UUID) (
 
 	audit.Record(s.db, userID.String(), "email_verify_issued", userID.String(), nil)
 	return token, nil
+}
+
+func (s *EmailVerifyService) EmailConfigured() bool {
+	return s.mailer != nil && s.mailer.Configured()
 }
 
 // FindUserByToken looks up a user by their pending verify token.

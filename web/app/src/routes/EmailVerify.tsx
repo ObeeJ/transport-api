@@ -10,6 +10,7 @@ export function EmailVerify() {
   const [sent, setSent] = useState(false)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [delivery, setDelivery] = useState<'email' | 'server_log'>('email')
 
   // Handle redirect back from the email link
   const verified = params.get('verified') === '1'
@@ -42,13 +43,14 @@ export function EmailVerify() {
     setError(null)
     setSending(true)
     try {
-      await api.post('/auth/email/verify/send')
+      const res = await api.post<{ delivery?: 'email' | 'server_log' }>('/auth/email/verify/send')
+      setDelivery(res.delivery ?? 'email')
       setSent(true)
     } catch (err) {
       if (err instanceof ApiError && err.code === 'already_verified') {
         await refresh()
       } else {
-        setError(err instanceof ApiError ? err.message : 'Could not send. Try again.')
+        setError(humanizeSendError(err))
       }
     } finally {
       setSending(false)
@@ -85,11 +87,21 @@ export function EmailVerify() {
           <div className="card-base p-5" style={{ borderColor: 'var(--color-moss-soft)' }}>
             <div className="label-cap text-[var(--color-moss)]">Email sent</div>
             <p className="mt-2 text-[13px] text-[var(--color-stone)] leading-relaxed">
-              Check your inbox at <strong className="text-[var(--color-ink)]">{user?.email}</strong>.
-              Click the link in the email — you'll be verified instantly.
+              {delivery === 'server_log' ? (
+                <>
+                  Email sending is not configured locally. Check the API server logs for the verification token.
+                </>
+              ) : (
+                <>
+                  Check your inbox at <strong className="text-[var(--color-ink)]">{user?.email}</strong>.
+                  Click the link in the email — you'll be verified instantly.
+                </>
+              )}
             </p>
             <p className="mt-2 text-[11px] text-[var(--color-stone)]">
-              The link expires in 24 hours. Check your spam folder if you don't see it.
+              {delivery === 'server_log'
+                ? 'In production this sends through Resend.'
+                : "The link expires in 24 hours. Check your spam folder if you don't see it."}
             </p>
           </div>
 
@@ -115,4 +127,20 @@ export function EmailVerify() {
       )}
     </div>
   )
+}
+
+function humanizeSendError(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.code === 'issue_failed') {
+      return 'Email provider did not accept the message. Check the API logs and Resend sender/recipient settings.'
+    }
+    if (err.code === 'csrf_missing' || err.code === 'csrf_mismatch') {
+      return 'Security token expired. Refresh this page and try again.'
+    }
+    if (err.code === 'not_authenticated') {
+      return 'Sign in again, then request a new verification email.'
+    }
+    return err.message
+  }
+  return 'Could not send. Try again.'
 }

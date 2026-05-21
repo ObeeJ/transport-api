@@ -13,6 +13,7 @@ func AutoMigrate(gdb *gorm.DB) error {
 		return fmt.Errorf("ensure uuid-ossp: %w", err)
 	}
 	if err := gdb.AutoMigrate(
+		&models.Institution{},
 		&models.User{},
 		&models.Session{},
 		&models.GiverDeposit{},
@@ -49,11 +50,26 @@ func AutoMigrate(gdb *gorm.DB) error {
 	`).Error; err != nil {
 		return fmt.Errorf("create bookings_unique_active: %w", err)
 	}
+	if err := seedInstitution(gdb); err != nil {
+		return fmt.Errorf("seed institution: %w", err)
+	}
 	if err := seedHubs(gdb); err != nil {
 		return fmt.Errorf("seed hubs: %w", err)
 	}
 	slog.Info("schema migrated")
 	return nil
+}
+
+func seedInstitution(gdb *gorm.DB) error {
+	var existing models.Institution
+	if err := gdb.Where("slug = ?", models.DefaultInstitutionSlug).First(&existing).Error; err == nil {
+		return nil
+	}
+	return gdb.Create(&models.Institution{
+		Name:   "Default Institution",
+		Slug:   models.DefaultInstitutionSlug,
+		Active: true,
+	}).Error
 }
 
 // seedHubs — idempotent seed of a small starter set of curated pickup points.

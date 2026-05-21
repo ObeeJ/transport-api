@@ -14,24 +14,26 @@ import (
 )
 
 var (
-	ErrPaymentsNotConfigured = errors.New("payments_not_configured")
-	ErrAmountTooSmall        = errors.New("amount_too_small")
-	ErrInvalidFrequency      = errors.New("invalid_frequency")
-	ErrDepositNotFound       = errors.New("deposit_not_found")
+	ErrPaymentsNotConfigured    = errors.New("payments_not_configured")
+	ErrAmountTooSmall           = errors.New("amount_too_small")
+	ErrInvalidFrequency         = errors.New("invalid_frequency")
+	ErrDepositNotFound          = errors.New("deposit_not_found")
+	ErrActiveRecipientCannotGive = errors.New("active_recipient_cannot_give")
 )
 
 var validFrequencies = map[string]bool{"once": true, "weekly": true, "monthly": true}
 
 type DepositService struct {
-	repo     *repository.DepositRepo
-	payments payments.DisbursementProvider
-	cfg      *config.Config
-	notify   *NotificationService
-	db       *gorm.DB
+	repo          *repository.DepositRepo
+	recipientRepo *repository.RecipientRepo
+	payments      payments.DisbursementProvider
+	cfg           *config.Config
+	notify        *NotificationService
+	db            *gorm.DB
 }
 
-func NewDepositService(repo *repository.DepositRepo, p payments.DisbursementProvider, cfg *config.Config, notify *NotificationService, db *gorm.DB) *DepositService {
-	return &DepositService{repo: repo, payments: p, cfg: cfg, notify: notify, db: db}
+func NewDepositService(repo *repository.DepositRepo, recipientRepo *repository.RecipientRepo, p payments.DisbursementProvider, cfg *config.Config, notify *NotificationService, db *gorm.DB) *DepositService {
+	return &DepositService{repo: repo, recipientRepo: recipientRepo, payments: p, cfg: cfg, notify: notify, db: db}
 }
 
 type InitializeDepositInput struct {
@@ -47,6 +49,11 @@ type InitializeDepositResult struct {
 }
 
 func (s *DepositService) Initialize(ctx context.Context, input InitializeDepositInput) (*InitializeDepositResult, error) {
+	if active, err := s.recipientRepo.HasActiveRecipient(input.UserID); err != nil {
+		return nil, err
+	} else if active {
+		return nil, ErrActiveRecipientCannotGive
+	}
 	if s.payments == nil {
 		return nil, ErrPaymentsNotConfigured
 	}

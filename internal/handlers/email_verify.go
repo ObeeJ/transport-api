@@ -24,7 +24,11 @@ func (h *EmailVerifyHandler) Send(c *fiber.Ctx) error {
 	if _, err := h.svc.IssueToken(c.Context(), user.ID); err != nil {
 		return fail(c, err, "issue_failed")
 	}
-	return c.JSON(fiber.Map{"ok": true})
+	delivery := "email"
+	if !h.svc.EmailConfigured() {
+		delivery = "server_log"
+	}
+	return c.JSON(fiber.Map{"ok": true, "delivery": delivery})
 }
 
 // GET /auth/email/verify/confirm?token=...

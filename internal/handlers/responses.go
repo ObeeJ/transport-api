@@ -11,24 +11,26 @@ import (
 // userResponse — safe user shape. Excludes password hash, exposes only
 // what the frontend needs.
 type userResponse struct {
-	ID        uuid.UUID `json:"id"`
-	Email     string    `json:"email"`
-	FirstName string    `json:"firstName"`
-	LastName  string    `json:"lastName"`
-	Phone     string    `json:"phone"`
-	Role      string    `json:"role"`
-	CreatedAt time.Time `json:"createdAt"`
+	ID              uuid.UUID  `json:"id"`
+	Email           string     `json:"email"`
+	FirstName       string     `json:"firstName"`
+	LastName        string     `json:"lastName"`
+	Phone           string     `json:"phone"`
+	Role            string     `json:"role"`
+	EmailVerifiedAt *time.Time `json:"emailVerifiedAt,omitempty"`
+	CreatedAt       time.Time  `json:"createdAt"`
 }
 
 func toUserResponse(u *models.User) userResponse {
 	return userResponse{
-		ID:        u.ID,
-		Email:     u.Email,
-		FirstName: u.FirstName,
-		LastName:  u.LastName,
-		Phone:     u.PhoneE164,
-		Role:      u.Role,
-		CreatedAt: u.CreatedAt,
+		ID:              u.ID,
+		Email:           u.Email,
+		FirstName:       u.FirstName,
+		LastName:        u.LastName,
+		Phone:           u.PhoneE164,
+		Role:            u.Role,
+		EmailVerifiedAt: u.EmailVerifiedAt,
+		CreatedAt:       u.CreatedAt,
 	}
 }
 

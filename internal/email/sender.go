@@ -2,29 +2,38 @@ package email
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log/slog"
-
-	"github.com/resend/resend-go/v2"
+	"mime"
+	"net"
+	"net/mail"
+	"net/smtp"
+	"strings"
+	"time"
 )
 
-type Sender struct {
-	client *resend.Client
-	from   string
+type SMTPConfig struct {
+	Host     string
+	Port     string
+	Username string
+	Password string
+	From     string
 }
 
-func New(apiKey, from string) *Sender {
-	if apiKey == "" || apiKey == "re_replace_me" {
-		return &Sender{from: from}
+type Sender struct {
+	cfg SMTPConfig
+}
+
+func New(cfg SMTPConfig) *Sender {
+	if cfg.Port == "" {
+		cfg.Port = "587"
 	}
-	return &Sender{
-		client: resend.NewClient(apiKey),
-		from:   from,
-	}
+	return &Sender{cfg: cfg}
 }
 
 func (s *Sender) Configured() bool {
-	return s.client != nil
+	return s.cfg.Host != "" && s.cfg.Username != "" && s.cfg.Password != ""
 }
 
 // SendVerification sends a click-to-verify link. The token is embedded in
@@ -46,18 +55,101 @@ func (s *Sender) send(ctx context.Context, to, subject, html string) error {
 		slog.Warn("email not configured — skipping send", "to", to, "subject", subject)
 		return nil
 	}
-	_, err := s.client.Emails.SendWithContext(ctx, &resend.SendEmailRequest{
-		From:    s.from,
-		To:      []string{to},
-		Subject: subject,
-		Html:    html,
-	})
-	if err != nil {
+	if err := s.sendSMTP(ctx, to, subject, html); err != nil {
 		slog.Error("email send failed", "to", to, "err", err)
 		return fmt.Errorf("email send: %w", err)
 	}
 	slog.Info("email sent", "to", to, "subject", subject)
 	return nil
+}
+
+func (s *Sender) sendSMTP(ctx context.Context, to, subject, html string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	fromAddr, err := mail.ParseAddress(s.cfg.From)
+	if err != nil {
+		return fmt.Errorf("parse EMAIL_FROM: %w", err)
+	}
+	toAddr, err := mail.ParseAddress(to)
+	if err != nil {
+		return fmt.Errorf("parse recipient: %w", err)
+	}
+
+	addr := s.cfg.Host + ":" + s.cfg.Port
+	message := buildMessage(s.cfg.From, toAddr.String(), subject, html)
+	auth := smtp.PlainAuth("", s.cfg.Username, s.cfg.Password, s.cfg.Host)
+
+	dialer := net.Dialer{Timeout: 15 * time.Second}
+	var conn net.Conn
+	if s.cfg.Port == "465" {
+		conn, err = tls.DialWithDialer(&dialer, "tcp", addr, &tls.Config{ServerName: s.cfg.Host})
+	} else {
+		conn, err = dialer.DialContext(ctx, "tcp", addr)
+	}
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if deadline, ok := ctx.Deadline(); ok {
+		_ = conn.SetDeadline(deadline)
+	}
+
+	client, err := smtp.NewClient(conn, s.cfg.Host)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	if s.cfg.Port != "465" {
+		if ok, _ := client.Extension("STARTTLS"); !ok {
+			return fmt.Errorf("smtp server does not support STARTTLS")
+		}
+		if err := client.StartTLS(&tls.Config{ServerName: s.cfg.Host}); err != nil {
+			return err
+		}
+	}
+	if err := client.Auth(auth); err != nil {
+		return err
+	}
+	if err := client.Mail(fromAddr.Address); err != nil {
+		return err
+	}
+	if err := client.Rcpt(toAddr.Address); err != nil {
+		return err
+	}
+	writer, err := client.Data()
+	if err != nil {
+		return err
+	}
+	if _, err := writer.Write([]byte(message)); err != nil {
+		_ = writer.Close()
+		return err
+	}
+	if err := writer.Close(); err != nil {
+		return err
+	}
+	return client.Quit()
+}
+
+func buildMessage(from, to, subject, html string) string {
+	headers := map[string]string{
+		"From":         from,
+		"To":           to,
+		"Subject":      mime.QEncoding.Encode("utf-8", subject),
+		"MIME-Version": "1.0",
+		"Content-Type": "text/html; charset=UTF-8",
+	}
+	var b strings.Builder
+	for key, value := range headers {
+		b.WriteString(key)
+		b.WriteString(": ")
+		b.WriteString(value)
+		b.WriteString("\r\n")
+	}
+	b.WriteString("\r\n")
+	b.WriteString(html)
+	return b.String()
 }
 
 // ── Templates ─────────────────────────────────────────────────────────────────

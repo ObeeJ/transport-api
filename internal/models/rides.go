@@ -11,8 +11,9 @@ import (
 // (hub → campus) so riders pool at known, well-lit spots. Door-to-door
 // is intentionally not supported in v1 — it breaks anonymity-of-need.
 type Hub struct {
-	ID        uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
-	Name      string    `gorm:"uniqueIndex;not null" json:"name"`
+	ID            uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+	InstitutionID uuid.UUID `gorm:"type:uuid;index;not null;default:'00000000-0000-0000-0000-000000000000'" json:"institutionId"`
+	Name          string    `gorm:"uniqueIndex;not null" json:"name"`
 	Lat       float64   `gorm:"" json:"lat,omitempty"`
 	Lng       float64   `gorm:"" json:"lng,omitempty"`
 	Active    bool      `gorm:"not null;default:true;index" json:"active"`
@@ -35,6 +36,7 @@ func (h *Hub) BeforeCreate(_ *gorm.DB) error {
 // Drivers receive no money — this is in-kind giving.
 type Trip struct {
 	ID            uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	InstitutionID uuid.UUID  `gorm:"type:uuid;index;not null;default:'00000000-0000-0000-0000-000000000000'" json:"institutionId"`
 	DriverID      uuid.UUID  `gorm:"type:uuid;index;not null" json:"driverId"`
 	OriginHubID   uuid.UUID  `gorm:"type:uuid;index;not null" json:"originHubId"`
 	Destination   string     `gorm:"not null" json:"destination"`

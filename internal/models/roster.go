@@ -15,8 +15,9 @@ import (
 // HashAlgo is recorded so we can rotate algorithms in future without
 // invalidating existing entries.
 type RosterEntry struct {
-	ID        uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
-	UserID    uuid.UUID `gorm:"type:uuid;uniqueIndex;not null" json:"-"`
+	ID            uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+	InstitutionID uuid.UUID `gorm:"type:uuid;index;not null;default:'00000000-0000-0000-0000-000000000000'" json:"institutionId"`
+	UserID        uuid.UUID `gorm:"type:uuid;uniqueIndex;not null" json:"-"`
 	IDHash    string    `gorm:"uniqueIndex;not null" json:"-"` // SHA-256(studentID + salt)
 	HashAlgo  string    `gorm:"not null;default:sha256_v1" json:"-"`
 	Verified  bool      `gorm:"not null;default:true" json:"verified"`

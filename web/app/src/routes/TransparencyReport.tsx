@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
+import { motion } from 'motion/react'
 import { api } from '@/lib/api'
+import { fadeUp, stagger, transition } from '@/lib/motion'
 
 type Report = {
   periodStart: string
@@ -12,7 +14,7 @@ type Report = {
   tripsCompleted: number
   seatsDonated: number
   uniqueDrivers: number
-  uniqueRiders: number
+  uniqueCommuters: number
   attendanceRate?: number
   retentionNote?: string
   bucketSuppressed: boolean
@@ -23,10 +25,6 @@ function naira(kobo: number): string {
   if (n >= 1_000_000) return `₦${(n / 1_000_000).toFixed(2)}m`
   if (n >= 1_000) return `₦${(n / 1_000).toFixed(0)}k`
   return `₦${n.toLocaleString('en-NG')}`
-}
-
-function monthLabel(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-NG', { month: 'long', year: 'numeric' })
 }
 
 export function TransparencyReport() {
@@ -40,105 +38,138 @@ export function TransparencyReport() {
   })
 
   const r = q.data
+  const monthName = r
+    ? new Date(r.periodStart).toLocaleDateString('en-NG', { month: 'long', year: 'numeric' })
+    : '…'
 
   return (
-    <div className="pt-4">
-      <div className="flex items-center justify-between">
-        <span className="font-mono text-[10px] text-[var(--color-stone)]">
-          REPORT · {r ? monthLabel(r.periodStart).toUpperCase() : '…'}
-        </span>
-        {r && (
-          <span className="font-mono text-[10px] text-[var(--color-stone)]">
-            {new Date(r.generatedAt).toLocaleDateString('en-NG', { day: '2-digit', month: 'short' })}
-          </span>
-        )}
-      </div>
-
-      <h1 className="mt-6 text-[40px] leading-[0.95] font-medium tracking-tight text-[var(--color-indigo)]">
-        {r ? new Date(r.periodStart).toLocaleDateString('en-NG', { month: 'long' }) : '…'},
-        <br />
-        in the open.
-      </h1>
-      <p className="mt-3 text-[12px] text-[var(--color-stone)]">
-        Every figure below is aggregate. Buckets smaller than ten people are omitted by design.
-      </p>
+    <motion.div
+      variants={stagger(0.07, 0.04)}
+      initial="hidden"
+      animate="show"
+      className="space-y-4 max-w-lg"
+    >
+      {/* Header */}
+      <motion.div variants={fadeUp} transition={transition.default}>
+        <div className="label-cap mb-4">{monthName.toUpperCase()}</div>
+        <h1 className="text-[36px] leading-[1] font-medium tracking-tight text-[var(--color-indigo)]">
+          Open<br />books.
+        </h1>
+        <p className="mt-3 text-[12px] text-[var(--color-stone)] leading-relaxed">
+          Every number here is a group total — no individual is identifiable. Groups smaller than 10 people are hidden to protect privacy.
+        </p>
+      </motion.div>
 
       {q.isLoading ? (
-        <p className="mt-8 text-sm text-[var(--color-stone)]">Loading report…</p>
+        <motion.p variants={fadeUp} className="text-sm text-[var(--color-stone)]">Loading report…</motion.p>
       ) : !r ? (
-        <p className="mt-8 text-sm text-[var(--color-coral)]">Could not load report.</p>
+        <motion.p variants={fadeUp} className="text-sm text-[var(--color-coral)]">Could not load report.</motion.p>
       ) : (
         <>
-          <div className="mt-5 grid grid-cols-3 gap-2">
-            <Big label="In" value={naira(r.totalRaisedKobo)} />
-            <Big label="Out" value={naira(r.totalDisbursedKobo)} tone="moss" />
-            <Big label="Givers" value={String(r.totalGivers)} tone="stone" />
-          </div>
-
-          {/* Attendance / retention */}
-          {r.bucketSuppressed ? (
-            <div className="mt-3 card-base p-4">
-              <div className="label-cap">Attendance</div>
-              <p className="mt-2 text-[12px] text-[var(--color-stone)]">{r.retentionNote}</p>
-            </div>
-          ) : r.attendanceRate != null ? (
-            <section
-              className="mt-3 card-base p-4 bg-gradient-to-b from-[var(--color-paper)] to-[#EEF3EC]"
-              style={{ borderColor: 'var(--color-moss-soft)' }}
-            >
-              <div className="label-cap" style={{ color: 'var(--color-moss)' }}>
-                Recipient cohort attendance
+          {/* Money */}
+          <motion.div variants={fadeUp} transition={transition.default} className="card-base overflow-hidden">
+            <div className="px-5 pt-4 pb-1">
+              <div className="label-cap mb-4">Pool · this month</div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-[11px] text-[var(--color-stone)] uppercase tracking-wider">Raised</p>
+                  <p className="mt-1 text-[28px] font-medium tracking-tight text-[var(--color-indigo)]">
+                    {naira(r.totalRaisedKobo)}
+                  </p>
+                  <p className="text-[11px] text-[var(--color-stone)] mt-0.5">from {r.totalGivers} givers</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-[var(--color-stone)] uppercase tracking-wider">Disbursed</p>
+                  <p className="mt-1 text-[28px] font-medium tracking-tight text-[var(--color-moss)]">
+                    {naira(r.totalDisbursedKobo)}
+                  </p>
+                  <p className="text-[11px] text-[var(--color-stone)] mt-0.5">to {r.activeRecipients} recipients</p>
+                </div>
               </div>
-              <div className="mt-1.5 flex items-baseline gap-3">
-                <span className="text-[32px] font-medium tracking-tight text-[var(--color-moss)]">
+            </div>
+            <div className="mx-5 my-4 h-px bg-[var(--color-hairline)]" />
+            {/* Progress bar */}
+            <div className="px-5 pb-4">
+              <div className="flex justify-between text-[10px] text-[var(--color-stone)] mb-1.5">
+                <span>Disbursed</span>
+                <span>
+                  {r.totalRaisedKobo > 0
+                    ? `${Math.round((r.totalDisbursedKobo / r.totalRaisedKobo) * 100)}%`
+                    : '0%'}
+                </span>
+              </div>
+              <div className="h-1.5 rounded-full bg-[var(--color-cream-2)] overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-[var(--color-moss)] transition-all duration-700"
+                  style={{
+                    width: r.totalRaisedKobo > 0
+                      ? `${Math.min((r.totalDisbursedKobo / r.totalRaisedKobo) * 100, 100)}%`
+                      : '0%',
+                  }}
+                />
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Attendance */}
+          <motion.div variants={fadeUp} transition={transition.default} className="card-base p-5">
+            <div className="label-cap mb-2">Class attendance</div>
+            {r.bucketSuppressed ? (
+              <div className="flex items-start gap-3">
+                <span className="text-[20px] shrink-0">🔒</span>
+                <div>
+                  <p className="text-[13px] font-medium text-[var(--color-indigo)]">Data hidden this period</p>
+                  <p className="mt-1 text-[12px] text-[var(--color-stone)] leading-relaxed">
+                    Fewer than 10 recipients were active this month. Showing attendance figures would make individuals identifiable, so this section is suppressed by design.
+                  </p>
+                </div>
+              </div>
+            ) : r.attendanceRate != null ? (
+              <div className="flex items-baseline gap-3">
+                <span className="text-[36px] font-medium tracking-tight text-[var(--color-moss)]">
                   {r.attendanceRate.toFixed(0)}%
                 </span>
-                <span className="text-[11px] text-[var(--color-stone)]">this period</span>
+                <span className="text-[12px] text-[var(--color-stone)]">of recipients attended class this period</span>
               </div>
-            </section>
-          ) : null}
+            ) : (
+              <p className="text-[12px] text-[var(--color-stone)]">No attendance data for this period.</p>
+            )}
+          </motion.div>
 
-          {/* Ride rail */}
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <Big label="Trips" value={String(r.tripsCompleted)} />
-            <Big label="Seats donated" value={String(r.seatsDonated)} />
-          </div>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            <Big label="Drivers" value={String(r.uniqueDrivers)} tone="stone" />
-            <Big label="Riders" value={String(r.uniqueRiders)} tone="stone" />
-          </div>
-
-          {/* Recipients */}
-          <div className="mt-3">
-            <div className="label-cap mb-2">Active recipients this period</div>
-            <div className="card-base p-4">
-              <span className="text-[32px] font-medium tracking-tight text-[var(--color-indigo)]">
-                {r.activeRecipients}
-              </span>
+          {/* Ride network */}
+          <motion.div variants={fadeUp} transition={transition.default} className="card-base overflow-hidden">
+            <div className="px-5 pt-4 pb-1">
+              <div className="label-cap mb-4">Ride network</div>
+              <div className="grid grid-cols-2 gap-4">
+                <Stat label="Trips completed" value={String(r.tripsCompleted)} />
+                <Stat label="Seats donated" value={String(r.seatsDonated)} />
+                <Stat label="Drivers" value={String(r.uniqueDrivers)} tone="stone" />
+                <Stat label="Commuters" value={String(r.uniqueCommuters)} tone="stone" />
+              </div>
             </div>
-          </div>
+            <div className="h-4" />
+          </motion.div>
 
-          <div className="my-4 h-px bg-[var(--color-hairline)]" />
-          <p className="text-[11px] text-[var(--color-stone)] leading-relaxed">
-            This report is auto-generated from the platform's audit log. All figures are aggregated — no individual is identifiable.
-          </p>
+          {/* Footer */}
+          <motion.p
+            variants={fadeUp}
+            transition={transition.slow}
+            className="text-[11px] text-[var(--color-stone)] leading-relaxed pb-4"
+          >
+            Auto-generated from the platform's audit log on {new Date(r.generatedAt).toLocaleDateString('en-NG', { day: '2-digit', month: 'short', year: 'numeric' })}. All figures are aggregated — no individual is identifiable.
+          </motion.p>
         </>
       )}
-    </div>
+    </motion.div>
   )
 }
 
-function Big({ label, value, tone = 'indigo' }: { label: string; value: string; tone?: 'indigo' | 'moss' | 'stone' }) {
-  const c =
-    tone === 'moss'
-      ? 'text-[var(--color-moss)]'
-      : tone === 'stone'
-        ? 'text-[var(--color-stone)]'
-        : 'text-[var(--color-indigo)]'
+function Stat({ label, value, tone = 'indigo' }: { label: string; value: string; tone?: 'indigo' | 'moss' | 'stone' }) {
+  const color = tone === 'moss' ? 'var(--color-moss)' : tone === 'stone' ? 'var(--color-stone)' : 'var(--color-indigo)'
   return (
-    <div className="card-base p-3">
-      <div className="label-cap mb-1">{label}</div>
-      <div className={`text-[22px] font-medium tracking-tight ${c}`}>{value}</div>
+    <div>
+      <p className="text-[11px] text-[var(--color-stone)] uppercase tracking-wider">{label}</p>
+      <p className="mt-1 text-[24px] font-medium tracking-tight" style={{ color }}>{value}</p>
     </div>
   )
 }

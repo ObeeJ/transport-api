@@ -23,6 +23,14 @@ func (h *RidesHandler) ListHubs(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"items": hubs})
 }
 
+func (h *RidesHandler) TripDemand(c *fiber.Ctx) error {
+	rows, err := h.svc.TripDemand()
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "query_failed"})
+	}
+	return c.JSON(fiber.Map{"items": rows})
+}
+
 func (h *RidesHandler) PublishTrip(c *fiber.Ctx) error {
 	user := middleware.CurrentUser(c)
 	if user == nil {

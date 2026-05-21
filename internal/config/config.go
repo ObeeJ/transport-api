@@ -26,28 +26,34 @@ type Config struct {
 	// can't initiate third-party transfers yet.
 	MockTransfers bool
 
-	// Email (Resend)
-	ResendAPIKey        string
+	// Email (SMTP)
 	EmailFrom           string
-	ResendWebhookSecret string // from Resend dashboard → Webhooks → signing secret
+	SMTPHost            string
+	SMTPPort            string
+	SMTPUsername        string
+	SMTPPassword        string
+	ResendWebhookSecret string // dormant while SMTP is used for sending
 }
 
 func Load() (*Config, error) {
 	c := &Config{
-		APIPort:           env("API_PORT", "8080"),
-		AppEnv:            env("APP_ENV", "development"),
-		DatabaseURL:       env("DATABASE_URL", "postgres://akin:akin_dev@localhost:55432/akin?sslmode=disable"),
-		RedisURL:          env("REDIS_URL", "redis://localhost:6379/0"),
-		SessionCookieName: env("SESSION_COOKIE_NAME", "akin_session"),
-		SessionKey:        env("SESSION_KEY", ""),
-		PaystackSecretKey: env("PAYSTACK_SECRET_KEY", ""),
-		PaystackPublicKey: env("PAYSTACK_PUBLIC_KEY", ""),
-		APIBaseURL:        env("API_BASE_URL", "http://localhost:8080"),
-		AppBaseURL:        env("APP_BASE_URL", "http://localhost:5173"),
-		CORSAllowedOrigin: env("CORS_ALLOWED_ORIGIN", "http://localhost:5173"),
-		MockTransfers:     env("MOCK_TRANSFERS", "false") == "true",
-		ResendAPIKey:        env("RESEND_API_KEY", ""),
-		EmailFrom:           env("EMAIL_FROM", "Akin. <onboarding@resend.dev>"),
+		APIPort:             env("API_PORT", "8080"),
+		AppEnv:              env("APP_ENV", "development"),
+		DatabaseURL:         env("DATABASE_URL", "postgres://akin:akin_dev@localhost:55432/akin?sslmode=disable"),
+		RedisURL:            env("REDIS_URL", "redis://localhost:6379/0"),
+		SessionCookieName:   env("SESSION_COOKIE_NAME", "akin_session"),
+		SessionKey:          env("SESSION_KEY", ""),
+		PaystackSecretKey:   env("PAYSTACK_SECRET_KEY", ""),
+		PaystackPublicKey:   env("PAYSTACK_PUBLIC_KEY", ""),
+		APIBaseURL:          env("API_BASE_URL", "http://localhost:8080"),
+		AppBaseURL:          env("APP_BASE_URL", "http://localhost:5173"),
+		CORSAllowedOrigin:   env("CORS_ALLOWED_ORIGIN", "http://localhost:5173"),
+		MockTransfers:       env("MOCK_TRANSFERS", "false") == "true",
+		EmailFrom:           env("EMAIL_FROM", "Akin <noreply@example.com>"),
+		SMTPHost:            env("SMTP_HOST", ""),
+		SMTPPort:            env("SMTP_PORT", "587"),
+		SMTPUsername:        env("SMTP_USERNAME", ""),
+		SMTPPassword:        env("SMTP_PASSWORD", ""),
 		ResendWebhookSecret: env("RESEND_WEBHOOK_SECRET", ""),
 	}
 
@@ -95,6 +101,9 @@ func (c *Config) Warnings() []string {
 			ws = append(ws, "SESSION_KEY is empty — sessions will still work but tokens are not bound to a server-side secret")
 		}
 	}
+	if c.EmailConfigured() && c.SMTPHost == "smtp.gmail.com" {
+		ws = append(ws, "SMTP uses Gmail — SMTP_PASSWORD must be a Google app password, not your normal account password")
+	}
 	return ws
 }
 
@@ -103,7 +112,7 @@ func (c *Config) PaystackConfigured() bool {
 }
 
 func (c *Config) EmailConfigured() bool {
-	return c.ResendAPIKey != "" && c.ResendAPIKey != "re_replace_me"
+	return c.SMTPHost != "" && c.SMTPUsername != "" && c.SMTPPassword != ""
 }
 
 func env(key, fallback string) string {

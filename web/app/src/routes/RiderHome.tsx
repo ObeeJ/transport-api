@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'motion/react'
 import { ApiError, api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
-import { fadeUp, stagger, ease, transition } from '@/lib/motion'
+import { fadeUp, stagger, transition } from '@/lib/motion'
 
 type Hub = { id: string; name: string }
 type TripCard = {
@@ -52,16 +52,65 @@ function minutesFromNow(iso: string): string {
   return `in ${Math.round(diff / 60)} h`
 }
 
+// Peak travel slots derived from real /trips/demand data
+const heatMapHours = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+
+type DemandRow = {
+  hubId: string
+  hubName: string
+  hourSlot: number
+  totalSeats: number
+  bookedSeats: number
+  tripCount: number
+  fillRate: number
+}
+
+// fillRate 0-1 mapped to heat level 0-4
+function fillToHeat(fillRate: number, tripCount: number): number {
+  if (tripCount === 0) return 0
+  if (fillRate >= 0.85) return 4
+  if (fillRate >= 0.65) return 3
+  if (fillRate >= 0.4) return 2
+  if (fillRate > 0) return 1
+  return 0
+}
+
 export function RiderHome() {
   const qc = useQueryClient()
   const { user } = useAuth()
   const [hubFilter, setHubFilter] = useState<string>('')
+  const [activeCell, setActiveCell] = useState<{ hub: string; hour: number; val: number; row: DemandRow | null } | null>(null)
+  const [selectedCell, setSelectedCell] = useState<{ hub: string; hour: number; val: number; row: DemandRow | null } | null>(null)
+  const active = activeCell || selectedCell
+
+  const demand = useQuery<{ items: DemandRow[] }>({
+    queryKey: ['trips', 'demand'],
+    queryFn: () => api.get('/trips/demand'),
+    refetchInterval: 30_000,
+  })
+
+  // Build a lookup: hubName -> hourSlot -> DemandRow
+  const demandMap = useMemo(() => {
+    const m: Record<string, Record<number, DemandRow>> = {}
+    demand.data?.items.forEach(row => {
+      if (!m[row.hubName]) m[row.hubName] = {}
+      m[row.hubName][row.hourSlot] = row
+    })
+    return m
+  }, [demand.data])
 
   const hubs = useQuery<{ items: Hub[] }>({
     queryKey: ['hubs'],
     queryFn: () => api.get('/hubs'),
     staleTime: 10 * 60 * 1000,
   })
+
+  // Derive hub names from real demand data, fall back to hub list
+  const demandHubs = useMemo(() => {
+    const fromDemand = [...new Set(demand.data?.items.map(r => r.hubName) ?? [])]
+    if (fromDemand.length > 0) return fromDemand
+    return hubs.data?.items.map(h => h.name) ?? []
+  }, [demand.data, hubs.data])
   const trips = useQuery<{ items: TripCard[] }>({
     queryKey: ['trips', hubFilter],
     queryFn: () => api.get(`/trips${hubFilter ? `?hubId=${hubFilter}` : ''}`),
@@ -81,9 +130,6 @@ export function RiderHome() {
     return m
   }, [myBookings.data])
 
-  // The single "active" trip a rider should see at the top of the page:
-  // a `booked` booking whose underlying trip is published / boarding / in_transit.
-  // Prefer in_transit (most urgent) over not-yet-started.
   const activeBooking = useMemo(() => {
     const candidates = (myBookings.data?.items ?? []).filter(
       (b) =>
@@ -116,12 +162,13 @@ export function RiderHome() {
       variants={stagger(0.07, 0.04)}
       initial="hidden"
       animate="show"
-      className="pt-4"
+      className="pt-4 space-y-6"
     >
-      <motion.p variants={fadeUp} transition={transition.fast} className="text-[13px] text-[var(--color-stone)]">
-        Good morning{user?.email ? `, ${user.email.split('@')[0]}` : ''}.
+      <motion.p variants={fadeUp} transition={transition.fast} className="text-[13px] text-[var(--color-stone)] bg-white/40 px-4 py-2.5 rounded-xl border border-[var(--color-hairline)]">
+        Good morning{user?.email ? `, ${user.email.split('@')[0]}` : ''}. You are in <span className="text-[var(--color-moss)] font-semibold uppercase text-xs tracking-wider">Commuter Rail</span>
       </motion.p>
 
+      {/* Active Trip Tile */}
       <AnimatePresence>
         {activeBooking ? (
           <motion.div
@@ -136,14 +183,166 @@ export function RiderHome() {
         ) : null}
       </AnimatePresence>
 
-      <motion.div variants={fadeUp} transition={transition.default} className="mt-6 flex items-baseline justify-between">
-        <h2 className="text-2xl font-medium tracking-tight text-[var(--color-indigo)]">Find a ride</h2>
-        <span className="font-mono text-[10px] text-[var(--color-stone)]">
-          {trips.data?.items.length ?? 0} upcoming
+      <motion.section variants={fadeUp} className="card-base p-5 border border-[var(--color-hairline)] glow-moss">
+        <div className="flex items-center justify-between">
+          <div>
+            <span className="label-cap text-[var(--color-moss)] font-bold">Commuter Peak Hours & Demand</span>
+            <p className="text-[11px] text-[var(--color-stone)]">Live hub boarding demand — next 24 hours</p>
+          </div>
+          <span className="text-[10px] bg-[var(--color-moss)]/10 text-[var(--color-moss)] px-2 py-0.5 rounded font-mono font-bold tracking-wider">
+            {demand.isFetching ? 'Syncing…' : 'Live'}
+          </span>
+        </div>
+
+        {demand.isLoading ? (
+          <div className="mt-5 text-[11px] text-[var(--color-stone)] text-center py-4">Loading demand data…</div>
+        ) : demandHubs.length === 0 ? (
+          <div className="mt-5 text-[11px] text-[var(--color-stone)] text-center py-4">No active trips in the next 24 hours.</div>
+        ) : (
+          <div className="mt-5 space-y-3">
+            {/* Header Row */}
+            <div className="grid grid-cols-[80px_1fr] gap-3 items-center">
+              <span className="text-[9px] font-mono text-[var(--color-stone)] font-bold uppercase tracking-wider">Hub</span>
+              <div className="flex gap-1 overflow-x-auto">
+                {heatMapHours.map(hr => (
+                  <div
+                    key={hr}
+                    className={`shrink-0 w-8 text-center text-[9px] font-mono font-semibold transition-colors duration-150 py-0.5 rounded ${
+                      active?.hour === hr ? 'text-[var(--color-moss)] bg-[var(--color-moss)]/5' : 'text-[var(--color-stone)]'
+                    }`}
+                  >
+                    {hr}h
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Hub Rows */}
+            <div className="space-y-2">
+              {demandHubs.map(hubName => (
+                <div key={hubName} className="grid grid-cols-[80px_1fr] gap-3 items-center">
+                  <span className={`text-[10px] font-medium transition-all duration-150 py-1 rounded truncate text-left ${
+                    active?.hub === hubName
+                      ? 'text-[var(--color-moss)] font-bold bg-[var(--color-moss)]/5 pl-1.5'
+                      : 'text-[var(--color-indigo)] pl-1'
+                  }`}>
+                    {hubName}
+                  </span>
+                  <div className="flex gap-1 overflow-x-auto">
+                    {heatMapHours.map(hr => {
+                      const row = demandMap[hubName]?.[hr] ?? null
+                      const val = fillToHeat(row?.fillRate ?? 0, row?.tripCount ?? 0)
+                      const isHovered = activeCell?.hub === hubName && activeCell?.hour === hr
+                      const isSelected = selectedCell?.hub === hubName && selectedCell?.hour === hr
+                      const isActive = isHovered || isSelected
+                      return (
+                        <motion.div
+                          key={hr}
+                          whileHover={{ scale: 1.04, translateY: -2 }}
+                          onClick={() => {
+                            if (isSelected) setSelectedCell(null)
+                            else setSelectedCell({ hub: hubName, hour: hr, val, row })
+                          }}
+                          onMouseEnter={() => setActiveCell({ hub: hubName, hour: hr, val, row })}
+                          onMouseLeave={() => setActiveCell(null)}
+                          className={`shrink-0 w-8 h-[72px] flex flex-col justify-between items-center py-2 rounded-lg cursor-pointer border select-none transition-all duration-200 ${
+                            isActive
+                              ? 'border-[var(--color-moss)] ring-2 ring-[var(--color-moss)] ring-offset-1 bg-white shadow-md z-10'
+                              : 'border-[var(--color-hairline)] bg-[var(--color-paper)]/60 hover:bg-white/90 hover:border-[var(--color-stone-soft)] shadow-sm'
+                          } ${isSelected ? 'animate-pulse' : ''}`}
+                        >
+                          <span className="text-[8px] font-mono text-[var(--color-stone-soft)] leading-none">{hr}h</span>
+                          <div className="w-1.5 h-6 bg-[var(--color-cream-2)]/60 rounded-full overflow-hidden relative">
+                            <div
+                              className={`absolute bottom-0 left-0 w-full rounded-full transition-all duration-300 heat-rider-${val}`}
+                              style={{ height: row ? `${Math.max(row.fillRate * 100, 8)}%` : '8%' }}
+                            />
+                          </div>
+                          <span className="text-[9px] font-mono font-bold text-[var(--color-indigo)] leading-none">
+                            {row ? row.tripCount : '—'}
+                          </span>
+                        </motion.div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Telemetry Panel */}
+        <div className="card-base p-3.5 mt-4 border border-[var(--color-hairline)] bg-[var(--color-paper)]/50 relative overflow-hidden">
+          <AnimatePresence mode="wait">
+            {active ? (
+              <motion.div
+                key={`${active.hub}-${active.hour}`}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+              >
+                <div className="flex items-center gap-2">
+                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 heat-rider-${active.val} ${active.val === 4 ? 'animate-pulse ring-2 ring-[var(--color-moss)]/30' : ''}`} />
+                  <div>
+                    <span className="text-xs font-semibold text-[var(--color-indigo)]">
+                      {active.hub} at {active.hour}:00
+                    </span>
+                    {active.row ? (
+                      <p className="text-[10px] text-[var(--color-stone)]">
+                        {active.row.tripCount} trip{active.row.tripCount !== 1 ? 's' : ''} · {active.row.bookedSeats}/{active.row.totalSeats} seats booked · {Math.round(active.row.fillRate * 100)}% full
+                      </p>
+                    ) : (
+                      <p className="text-[10px] text-[var(--color-stone)]">No trips scheduled at this hour.</p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                  <div className="text-right">
+                    <span className="text-[10px] uppercase font-mono tracking-wider text-[var(--color-stone)] block">Seats left</span>
+                    <span className="text-xs font-bold text-[var(--color-moss)] font-mono">
+                      {active.row ? active.row.totalSeats - active.row.bookedSeats : '—'}
+                    </span>
+                  </div>
+                  {selectedCell && (
+                    <button
+                      onClick={e => { e.stopPropagation(); setSelectedCell(null) }}
+                      className="text-[10px] text-[var(--color-stone)] hover:text-[var(--color-coral)] font-mono px-2 py-1 rounded bg-[var(--color-cream-2)] border border-[var(--color-hairline)] transition-colors cursor-pointer"
+                    >
+                      clear ×
+                    </button>
+                  )}
+                </div>
+              </motion.div>
+            ) : (
+              <div className="text-[var(--color-stone)] text-[10px] uppercase tracking-wider flex items-center justify-center gap-2 py-1 w-full text-center">
+                <span className="animate-pulse w-1.5 h-1.5 rounded-full bg-[var(--color-stone-soft)]" />
+                <span>Tap or hover an hourly pillar to see live trip data</span>
+              </div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Legend */}
+        <div className="mt-4 flex items-center justify-between text-[9px] text-[var(--color-stone)] font-mono">
+          <span>Low demand</span>
+          <div className="flex gap-1.5">
+            {[0,1,2,3,4].map(v => <span key={v} className={`size-2.5 rounded-[2px] heat-rider-${v} ${v === 0 ? 'border border-[var(--color-hairline)]' : ''}`} />)}
+          </div>
+          <span>High demand</span>
+        </div>
+      </motion.section>
+
+      {/* Find a ride header */}
+      <motion.div variants={fadeUp} transition={transition.default} className="flex items-baseline justify-between pt-2">
+        <h2 className="text-2xl font-semibold tracking-tight text-[var(--color-indigo)]">Find a ride</h2>
+        <span className="font-mono text-xs text-[var(--color-stone)] bg-[var(--color-cream)] px-2 py-0.5 rounded-full">
+          {trips.data?.items.length ?? 0} active trips
         </span>
       </motion.div>
 
-      <motion.div variants={fadeUp} transition={transition.default} className="mt-3 flex gap-2 overflow-x-auto">
+      {/* Hub filter chips */}
+      <motion.div variants={fadeUp} transition={transition.default} className="flex gap-2 overflow-x-auto pb-1">
         <Chip active={hubFilter === ''} onClick={() => setHubFilter('')}>
           All hubs
         </Chip>
@@ -154,16 +353,18 @@ export function RiderHome() {
         ))}
       </motion.div>
 
+      {/* Trips list */}
       {trips.isLoading ? (
-        <motion.p variants={fadeUp} transition={transition.default} className="mt-6 text-sm text-[var(--color-stone)]">Loading trips…</motion.p>
+        <motion.p variants={fadeUp} transition={transition.default} className="text-sm text-[var(--color-stone)] text-center py-6">Loading upcoming routes…</motion.p>
       ) : trips.data && trips.data.items.length === 0 ? (
-        <motion.div variants={fadeUp} transition={transition.default} className="mt-6 card-base p-5 text-center">
-          <p className="text-sm text-[var(--color-stone)]">
-            No upcoming trips right now. Check back soon — or ask in class for someone to publish one.
+        <motion.div variants={fadeUp} transition={transition.default} className="card-base p-6 text-center">
+          <p className="text-sm text-[var(--color-stone)] leading-relaxed">
+            No active trips scheduled at this hub right now.<br />
+            Ask in your group channels for drivers to publish a ride.
           </p>
         </motion.div>
       ) : (
-        <motion.div variants={stagger(0.06, 0.1)} initial="hidden" animate="show">
+        <motion.div variants={stagger(0.06, 0.1)} initial="hidden" animate="show" className="space-y-3">
           {trips.data?.items.map((t) => {
             const myBooking = activeBookingByTrip[t.id]
             const isMine = t.driverId === user?.id
@@ -172,72 +373,82 @@ export function RiderHome() {
                 key={t.id}
                 variants={fadeUp}
                 transition={transition.default}
-                className="card-base mt-3 p-4"
+                whileHover={{ y: -1 }}
+                className="card-base overflow-hidden border border-[var(--color-hairline)] flex flex-col"
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="size-7 rounded-full bg-[var(--color-cream-2)] inline-flex items-center justify-center text-[13px] font-medium text-[var(--color-indigo)]">
-                      {(t.driverName ?? '?').charAt(0)}
-                    </span>
-                    <div>
-                      <div className="text-sm font-medium">{t.driverName ?? 'Driver'}</div>
-                      <div className="text-[11px] text-[var(--color-stone)] font-mono uppercase">
-                        {t.vehiclePlate || '—'}
+                {/* Card body */}
+                <div className="p-4 flex-1">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <span className="size-8 rounded-full bg-[var(--color-moss-soft)]/20 inline-flex items-center justify-center text-sm font-semibold text-[var(--color-moss)] shrink-0">
+                        {(t.driverName ?? '?').charAt(0)}
+                      </span>
+                      <div>
+                        <div className="text-sm font-bold text-[var(--color-indigo)] leading-tight">{t.driverName ?? 'Driver'}</div>
+                        <div className="text-[10px] text-[var(--color-stone)] font-mono uppercase bg-[var(--color-cream)] px-1.5 py-0.5 rounded mt-0.5 inline-block">
+                          {t.vehiclePlate || 'No Plate'}
+                        </div>
                       </div>
                     </div>
+                    <div className="text-right shrink-0">
+                      <div className="text-xl font-bold tracking-tight text-[var(--color-indigo)]">{timeOnly(t.departureAt)}</div>
+                      <div className="text-[10px] text-[var(--color-clay)] font-semibold uppercase tracking-wider mt-0.5">{minutesFromNow(t.departureAt)}</div>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-xl font-medium tracking-tight text-[var(--color-indigo)]">{timeOnly(t.departureAt)}</div>
-                    <div className="text-[10px] text-[var(--color-stone)]">{minutesFromNow(t.departureAt)}</div>
+
+                  <div className="mt-3 flex items-center justify-between">
+                    <span className="text-xs font-semibold text-[var(--color-indigo)]">
+                      {t.hubName} <span className="text-[var(--color-clay)] font-bold">→</span> {t.destination}
+                    </span>
+                    <span className={`font-mono text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      t.seatsLeft === 0
+                        ? 'bg-[var(--color-coral)]/10 text-[var(--color-coral)]'
+                        : 'bg-[var(--color-moss)]/10 text-[var(--color-moss)]'
+                    }`}>
+                      {t.seatsLeft}/{t.totalSeats} seats
+                    </span>
                   </div>
-                </div>
-                <div className="my-3 h-px bg-[var(--color-hairline)]" />
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-[var(--color-stone)]">
-                    {t.hubName} <span className="text-[var(--color-clay)]">→</span> {t.destination}
-                  </span>
-                  <span className={`font-mono ${t.seatsLeft === 0 ? 'text-[var(--color-stone)]' : 'text-[var(--color-moss)]'}`}>
-                    {t.seatsLeft} / {t.totalSeats} seats
-                  </span>
                 </div>
 
-                <div className="mt-3 flex gap-2">
+                {/* Action strip — flush to bottom, full width, separated by top border */}
+                <div className="border-t border-[var(--color-hairline)] flex">
                   {isMine ? (
-                    <div className="flex-1 h-10 rounded-[12px] flex items-center justify-center text-xs text-[var(--color-stone)] border border-[var(--color-hairline)]">
-                      Your trip
+                    <div className="flex-1 h-11 flex items-center justify-center text-xs text-[var(--color-stone)] bg-[var(--color-cream)] font-medium">
+                      Your published trip
                     </div>
                   ) : myBooking ? (
                     <>
                       <Link
                         to={`/trip/${t.id}`}
-                        className="flex-1 h-10 rounded-[12px] border border-[var(--color-hairline)] bg-[var(--color-paper)] text-xs flex items-center justify-center"
+                        className="flex-1 h-11 flex items-center justify-center text-xs font-semibold text-[var(--color-indigo)] hover:bg-[var(--color-cream-2)] transition-colors border-r border-[var(--color-hairline)]"
                       >
-                        View trip
+                        Open trip
                       </Link>
                       <motion.button
-                        whileTap={{ scale: 0.97 }}
+                        whileTap={{ scale: 0.98 }}
                         onClick={() => cancelBooking.mutate(t.id)}
                         disabled={cancelBooking.isPending}
-                        className="flex-1 h-10 rounded-[12px] border border-[var(--color-coral)]/30 text-[var(--color-coral)] text-xs"
+                        className="flex-1 h-11 flex items-center justify-center text-xs font-semibold text-[var(--color-coral)] hover:bg-[var(--color-coral)]/5 transition-colors cursor-pointer"
                       >
-                        {cancelBooking.isPending ? '…' : 'Cancel seat'}
+                        {cancelBooking.isPending ? '…' : 'Cancel'}
                       </motion.button>
                     </>
                   ) : t.seatsLeft <= 0 ? (
-                    <div className="flex-1 h-10 rounded-[12px] flex items-center justify-center text-xs text-[var(--color-stone)] border border-[var(--color-hairline)]">
-                      Full
+                    <div className="flex-1 h-11 flex items-center justify-center text-xs text-[var(--color-stone)] bg-[var(--color-cream)] font-medium">
+                      Fully booked
                     </div>
                   ) : (
                     <motion.button
-                      whileTap={{ scale: 0.97 }}
+                      whileTap={{ scale: 0.98 }}
                       onClick={() => book.mutate(t.id)}
                       disabled={book.isPending}
-                      className="flex-1 h-10 rounded-[12px] bg-[var(--color-indigo)] text-[var(--color-paper)] text-xs font-medium"
+                      className="flex-1 h-11 flex items-center justify-center text-xs font-bold text-white bg-[var(--color-indigo)] hover:opacity-90 transition-opacity cursor-pointer"
                     >
-                      {book.isPending ? '…' : 'Book a seat'}
+                      {book.isPending ? 'Reserving…' : 'Book a seat'}
                     </motion.button>
                   )}
                 </div>
+
                 <AnimatePresence>
                   {book.error && book.variables === t.id ? (
                     <motion.p
@@ -246,7 +457,7 @@ export function RiderHome() {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0 }}
                       transition={transition.fast}
-                      className="mt-2 text-[11px] text-[var(--color-coral)]"
+                      className="text-[11px] text-[var(--color-coral)] bg-[var(--color-coral)]/10 px-4 py-2"
                       role="alert"
                     >
                       {book.error instanceof ApiError ? book.error.message : 'Could not book.'}
@@ -265,8 +476,6 @@ export function RiderHome() {
 }
 
 function PastRides({ bookings }: { bookings: Booking[] }) {
-  // "Past" = the booking or its trip has reached a terminal state.
-  // Sorted newest first by the trip's departure (falls back to booking time).
   const past = bookings
     .filter((b) => {
       if (b.status === 'cancelled' || b.status === 'completed' || b.status === 'no_show') return true
@@ -282,13 +491,11 @@ function PastRides({ bookings }: { bookings: Booking[] }) {
   if (past.length === 0) return null
 
   return (
-    <section className="mt-8">
-      <div className="label-cap mb-2">Past rides</div>
-      <div className="card-base divide-y divide-[var(--color-hairline)]">
-        {past.slice(0, 12).map((b) => {
+    <section className="mt-8 space-y-3">
+      <div className="label-cap mb-1">Past travel logs</div>
+      <div className="card-base divide-y divide-[var(--color-hairline)] border border-[var(--color-hairline)]">
+        {past.slice(0, 8).map((b) => {
           const t = b.trip
-          // Outcome label is driven by the most truthful signal we have:
-          // a cancelled booking trumps a completed trip ("the rider cancelled, regardless of what happened to the trip").
           const outcome =
             b.status === 'cancelled'
               ? { label: 'cancelled', tone: 'coral' as const }
@@ -300,10 +507,10 @@ function PastRides({ bookings }: { bookings: Booking[] }) {
           return (
             <div key={b.id} className="px-4 py-3 flex items-center justify-between text-sm">
               <div className="min-w-0 pr-3">
-                <div className="text-[var(--color-ink)] truncate">
+                <div className="text-[var(--color-indigo)] font-semibold truncate text-[13px]">
                   {b.hubName ?? '—'} <span className="text-[var(--color-clay)]">→</span> {t?.destination ?? '—'}
                 </div>
-                <div className="text-[10px] text-[var(--color-stone)] mt-0.5">
+                <div className="text-[10px] text-[var(--color-stone)] mt-0.5 font-medium">
                   {b.driverName ? `${b.driverName} · ` : ''}
                   {t?.departureAt
                     ? new Date(t.departureAt).toLocaleString('en-NG', {
@@ -319,7 +526,7 @@ function PastRides({ bookings }: { bookings: Booking[] }) {
                 </div>
               </div>
               <span
-                className="font-mono text-[10px] uppercase tracking-wider px-2 py-1 rounded-full whitespace-nowrap"
+                className="font-mono text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded-full whitespace-nowrap"
                 style={{
                   background:
                     outcome.tone === 'moss'
@@ -335,9 +542,9 @@ function PastRides({ bookings }: { bookings: Booking[] }) {
           )
         })}
       </div>
-      {past.length > 12 ? (
-        <p className="mt-2 text-[10px] text-[var(--color-stone)] text-center">
-          Showing the most recent 12.
+      {past.length > 8 ? (
+        <p className="text-[10px] text-[var(--color-stone)] text-center">
+          Recent logs displayed.
         </p>
       ) : null}
     </section>
@@ -350,7 +557,7 @@ function ActiveTripTile({ booking }: { booking: Booking }) {
   const isLive = t.status === 'in_transit'
   return (
     <section
-      className="mt-4 card-base p-5"
+      className="card-base p-5 border border-[var(--color-hairline)] glow-moss"
       style={{
         background: isLive
           ? 'linear-gradient(180deg, var(--color-paper) 0%, #EEF3EC 100%)'
@@ -362,32 +569,32 @@ function ActiveTripTile({ booking }: { booking: Booking }) {
         <div className="flex items-center gap-2">
           {isLive ? (
             <>
-              <span className="size-2 rounded-full bg-[var(--color-moss)]" />
-              <span className="label-cap text-[var(--color-moss)]">In transit · your trip</span>
+              <span className="size-2 rounded-full bg-[var(--color-moss)] animate-pulse" />
+              <span className="label-cap text-[var(--color-moss)] font-bold">Live · In Transit</span>
             </>
           ) : (
             <>
-              <span className="size-2 rounded-full bg-[var(--color-clay)]" />
-              <span className="label-cap text-[var(--color-clay)]">Booked · {t.status}</span>
+              <span className="size-2 rounded-full bg-[var(--color-clay)] animate-pulse" />
+              <span className="label-cap text-[var(--color-clay)] font-bold">Reserved · Boarding soon</span>
             </>
           )}
         </div>
-        <span className="font-mono text-[10px] text-[var(--color-stone)]">
+        <span className="font-mono text-[10px] text-[var(--color-stone)] font-bold">
           {timeOnly(t.departureAt)}
         </span>
       </div>
-      <div className="mt-2 text-[18px] leading-tight font-medium tracking-tight text-[var(--color-indigo)]">
+      <div className="mt-3 text-[19px] leading-tight font-bold tracking-tight text-[var(--color-indigo)]">
         {booking.hubName ?? '—'} <span className="text-[var(--color-clay)]">→</span> {t.destination}
       </div>
-      <div className="mt-1 text-[12px] text-[var(--color-stone)]">
-        Driver: {booking.driverName ?? '—'}
+      <div className="mt-1.5 text-[12px] text-[var(--color-stone)] font-medium">
+        Driver: <span className="text-[var(--color-indigo)] font-semibold">{booking.driverName ?? '—'}</span>
         {t.vehiclePlate ? ` · ${t.vehiclePlate}` : ''}
       </div>
       <Link
         to={`/trip/${t.id}`}
-        className="btn-primary mt-4 h-11 w-full text-sm"
+        className="btn-primary mt-4 h-11 w-full text-xs font-semibold"
       >
-        {isLive ? 'Open trip view' : 'View details'}
+        {isLive ? 'Track Live Ride' : 'Open Trip Details'}
       </Link>
     </section>
   )
@@ -408,10 +615,10 @@ function Chip({
       onClick={onClick}
       whileTap={{ scale: 0.94 }}
       transition={transition.fast}
-      className={`inline-flex items-center px-3 py-1 rounded-full text-[11px] font-medium tracking-wide uppercase shrink-0 transition-colors duration-150 ${
+      className={`inline-flex items-center px-4 py-1.5 rounded-full text-[11px] font-bold tracking-wide uppercase shrink-0 transition-colors duration-150 cursor-pointer ${
         active
-          ? 'bg-[var(--color-indigo)] text-[var(--color-paper)]'
-          : 'bg-[var(--color-cream-2)] text-[var(--color-ink)]'
+          ? 'bg-[var(--color-indigo)] text-[var(--color-paper)] shadow-sm'
+          : 'bg-[var(--color-cream-2)] text-[var(--color-indigo)] hover:bg-[var(--color-cream-2)]/80'
       }`}
     >
       {children}

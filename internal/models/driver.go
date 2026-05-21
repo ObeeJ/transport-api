@@ -12,6 +12,7 @@ import (
 // as recipient applications. Status: pending | approved | declined.
 type DriverProfile struct {
 	ID               uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	InstitutionID    uuid.UUID  `gorm:"type:uuid;index;not null;default:'00000000-0000-0000-0000-000000000000'" json:"institutionId"`
 	UserID           uuid.UUID  `gorm:"type:uuid;uniqueIndex;not null" json:"-"`
 	Status           string     `gorm:"not null;default:pending;index" json:"status"` // pending | approved | declined
 	VehicleType      string     `gorm:"not null" json:"vehicleType"`                  // car | bus | minivan

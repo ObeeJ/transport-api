@@ -11,6 +11,9 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
+      devOptions: {
+        enabled: false, // disable SW in dev to prevent stale cache issues
+      },
       manifest: {
         name: 'Akin',
         short_name: 'Akin',

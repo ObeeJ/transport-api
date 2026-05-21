@@ -15,19 +15,21 @@ import (
 )
 
 var (
-	ErrAttendanceCSVInvalid = errors.New("attendance_csv_invalid")
-	ErrAttendanceMissing    = errors.New("attendance_missing")
+	ErrAttendanceCSVInvalid    = errors.New("attendance_csv_invalid")
+	ErrAttendanceMissing       = errors.New("attendance_missing")
+	ErrManualOverrideNeedsNote = errors.New("manual_override_needs_note")
 )
 
 type AttendanceService struct {
-	repo    *repository.AttendanceRepo
-	users   *repository.UserRepo
-	drivers *repository.DriverRepo
-	db      *gorm.DB
+	repo       *repository.AttendanceRepo
+	users      *repository.UserRepo
+	drivers    *repository.DriverRepo
+	recipients *repository.RecipientRepo
+	db         *gorm.DB
 }
 
-func NewAttendanceService(repo *repository.AttendanceRepo, users *repository.UserRepo, drivers *repository.DriverRepo, db *gorm.DB) *AttendanceService {
-	return &AttendanceService{repo: repo, users: users, drivers: drivers, db: db}
+func NewAttendanceService(repo *repository.AttendanceRepo, users *repository.UserRepo, drivers *repository.DriverRepo, recipients *repository.RecipientRepo, db *gorm.DB) *AttendanceService {
+	return &AttendanceService{repo: repo, users: users, drivers: drivers, recipients: recipients, db: db}
 }
 
 // CSVUploadResult — summary returned to the steward after upload.
@@ -119,6 +121,34 @@ func (s *AttendanceService) UploadCSV(stewardID uuid.UUID, r io.Reader) (*CSVUpl
 		"unknown":  len(result.UnknownEmail),
 	})
 	return result, nil
+}
+
+// ManualOverride — steward marks a single recipient attended/absent for a week.
+// Identified by pseudonymous ID so the steward never needs the real user identity.
+// reason is required and audit-logged.
+func (s *AttendanceService) ManualOverride(stewardID uuid.UUID, pseudoID string, weekStart time.Time, attended bool, reason string) error {
+	if strings.TrimSpace(reason) == "" {
+		return ErrManualOverrideNeedsNote
+	}
+	rec, err := s.recipients.FindByPseudonymousID(pseudoID)
+	if err != nil {
+		return ErrRecipientNotFound
+	}
+	a := &models.Attendance{
+		UserID:    rec.UserID,
+		WeekStart: models.WeekStartOf(weekStart),
+		Attended:  attended,
+		Source:    "manual",
+	}
+	if err := s.repo.Upsert(a); err != nil {
+		return err
+	}
+	audit.Record(s.db, stewardID.String(), "attendance_manual_override", pseudoID, map[string]any{
+		"attended":  attended,
+		"weekStart": weekStart.Format("2006-01-02"),
+		"reason":    reason,
+	})
+	return nil
 }
 
 func parseAttended(s string) (bool, error) {
