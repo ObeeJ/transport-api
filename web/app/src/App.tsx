@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router'
+import { Routes, Route } from 'react-router'
 import { RoleShell, SharedRoleShell } from '@/components/layout/RoleShell'
 import { RequireAuth } from '@/components/RequireAuth'
 import { RequireSteward } from '@/components/RequireSteward'
@@ -48,6 +48,7 @@ import { StewardRoster } from '@/routes/steward/StewardRoster'
 import { StewardSOS } from '@/routes/steward/StewardSOS'
 import { StewardAppeals } from '@/routes/steward/StewardAppeals'
 import { StewardDrivers } from '@/routes/steward/StewardDrivers'
+import { NotFound } from '@/routes/NotFound'
 
 export default function App() {
   return (
@@ -114,7 +115,7 @@ export default function App() {
       </Route>
 
       {/* Fallback */}
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<NotFound />} />
     </Routes>
   )
 }
