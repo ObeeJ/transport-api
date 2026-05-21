@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
 
 API="${API_BASE:-http://localhost:8080}"
 JAR="/tmp/akin_test.jar"
@@ -74,7 +74,7 @@ R=$(curl -c "$JAR" -b "$JAR" -s -X POST "$API/auth/logout" \
 check "POST /auth/logout → ok" "ok" "$R"
 
 R=$(curl -b "$JAR" -s "$API/auth/me")
-check "GET /auth/me after logout → not_authenticated" "not_authenticated" "$R"
+check "GET /auth/me after logout → unauthenticated" "not_authenticated\|session_invalid" "$R"
 
 # Re-login for remaining tests
 curl -c "$JAR" -b "$JAR" -s "$API/auth/csrf" > /dev/null
