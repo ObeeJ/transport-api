@@ -144,8 +144,8 @@ export function EmailVerify() {
 
 function humanizeSendError(err: unknown): string {
   if (err instanceof ApiError) {
-    if (err.code === 'issue_failed') {
-      return 'Email provider did not accept the message. Check the API logs and Resend sender/recipient settings.'
+    if (err.code === 'issue_failed' || err.code === 'email_send_failed') {
+      return 'We couldn\'t send the email right now. Try again in a moment.'
     }
     if (err.code === 'csrf_missing' || err.code === 'csrf_mismatch') {
       return 'Security token expired. Refresh this page and try again.'
@@ -153,7 +153,9 @@ function humanizeSendError(err: unknown): string {
     if (err.code === 'not_authenticated') {
       return 'Sign in again, then request a new verification email.'
     }
-    return err.message
+    if (err.code === 'already_verified') {
+      return 'Your email is already verified.'
+    }
   }
   return 'Could not send. Try again.'
 }
