@@ -12,6 +12,7 @@ import (
 // A steward who is also a member can give & ride normally; the role just unlocks /steward/*.
 type User struct {
 	ID                     uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	InstitutionID          uuid.UUID  `gorm:"type:uuid;index;not null;default:'00000000-0000-0000-0000-000000000000'" json:"institutionId"`
 	Email                  string     `gorm:"uniqueIndex;not null" json:"email"`
 	FirstName              string     `gorm:"not null;default:''" json:"firstName"`
 	LastName               string     `gorm:"not null;default:''" json:"lastName"`
@@ -68,6 +69,7 @@ func (s *Session) BeforeCreate(_ *gorm.DB) error {
 // GiverDeposit — one giver contribution to the pool. Lifecycle: pending -> succeeded | failed.
 type GiverDeposit struct {
 	ID                uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	InstitutionID     uuid.UUID  `gorm:"type:uuid;index;not null;default:'00000000-0000-0000-0000-000000000000'" json:"institutionId"`
 	UserID            uuid.UUID  `gorm:"type:uuid;index;not null" json:"userId"`
 	AmountKobo        int64      `gorm:"not null" json:"amountKobo"`
 	Currency          string     `gorm:"not null;default:NGN" json:"currency"`

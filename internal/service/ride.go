@@ -51,6 +51,10 @@ func (s *RideService) ListHubs() ([]models.Hub, error) {
 	return s.repo.ListActiveHubs()
 }
 
+func (s *RideService) TripDemand() ([]repository.DemandRow, error) {
+	return s.repo.DemandByHubHour()
+}
+
 type PublishTripInput struct {
 	DriverID     uuid.UUID
 	OriginHubID  string
@@ -160,9 +164,9 @@ func (s *RideService) GetTrip(id, requesterID uuid.UUID) (map[string]any, error)
 		riders := make([]map[string]any, 0, len(bookings))
 		for _, b := range bookings {
 			riders = append(riders, map[string]any{
-				"bookingId":  b.ID,
-				"riderFirst": names[b.RiderID],
-				"bookedAt":   b.CreatedAt,
+				"bookingId":     b.ID,
+				"commuterFirst": names[b.RiderID],
+				"bookedAt":      b.CreatedAt,
 			})
 		}
 		resp["riders"] = riders

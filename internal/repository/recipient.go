@@ -34,6 +34,12 @@ func (r *RecipientRepo) ListPending() ([]models.Recipient, error) {
 	return items, r.db.Where("status = ?", "pending").Order("created_at asc").Find(&items).Error
 }
 
+func (r *RecipientRepo) HasActiveRecipient(userID uuid.UUID) (bool, error) {
+	var count int64
+	err := r.db.Model(&models.Recipient{}).Where("user_id = ? AND status = ?", userID, "approved").Count(&count).Error
+	return count > 0, err
+}
+
 func (r *RecipientRepo) ListApproved() ([]models.Recipient, error) {
 	var items []models.Recipient
 	return items, r.db.Where("status = ?", "approved").Order("decided_at desc").Find(&items).Error

@@ -18,7 +18,7 @@ import { NotesFeed } from '@/routes/NotesFeed'
 import { TransparencyReport } from '@/routes/TransparencyReport'
 import { PaystackCallback } from '@/routes/PaystackCallback'
 
-// Rider rail
+// Commuter rail
 import { RiderHome } from '@/routes/RiderHome'
 import { ActiveTrip } from '@/routes/ActiveTrip'
 
@@ -72,8 +72,8 @@ export default function App() {
         {/* Paystack callback — full-screen, outside shell */}
         <Route path="/give/callback" element={<PaystackCallback />} />
 
-        {/* ── Rider rail ── */}
-        <Route element={<RoleShell role="rider" />}>
+        {/* ── Commuter rail ── */}
+        <Route element={<RoleShell role="commuter" />}>
           <Route path="/ride" element={<RiderHome />} />
           <Route path="/trip/:tripId" element={<ActiveTrip />} />
           <Route path="/support" element={<RecipientStatus />} />

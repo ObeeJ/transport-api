@@ -13,8 +13,9 @@ import (
 // signal. The recipient flow consults it at payout time; givers and
 // drivers never see it. WeekStart is the Monday of the ISO week, UTC.
 type Attendance struct {
-	ID        uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
-	UserID    uuid.UUID `gorm:"type:uuid;index;not null;uniqueIndex:attendance_unique_week" json:"userId"`
+	ID            uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+	InstitutionID uuid.UUID `gorm:"type:uuid;index;not null;default:'00000000-0000-0000-0000-000000000000'" json:"institutionId"`
+	UserID        uuid.UUID `gorm:"type:uuid;index;not null;uniqueIndex:attendance_unique_week" json:"userId"`
 	WeekStart time.Time `gorm:"type:date;not null;index;uniqueIndex:attendance_unique_week" json:"weekStart"`
 	Attended  bool      `gorm:"not null;default:false" json:"attended"`
 	Source    string    `gorm:"not null;default:csv" json:"source"` // csv | qr (future)

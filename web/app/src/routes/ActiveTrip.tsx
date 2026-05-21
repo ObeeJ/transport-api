@@ -22,7 +22,7 @@ type TripDetail = {
   driverName?: string
   isDriver: boolean
   myBooking?: { id: string; status: string }
-  riders?: { bookingId: string; riderFirst: string }[]
+  riders?: { bookingId: string; commuterFirst: string }[]
 }
 
 export function ActiveTrip() {
@@ -114,7 +114,7 @@ export function ActiveTrip() {
 
           <div className="flex items-center justify-between text-[12px]">
             <span className="text-[var(--color-stone)]">
-              {bookedCount} of {trip.totalSeats} riders on board
+              {bookedCount} of {trip.totalSeats} commuters on board
             </span>
           </div>
 

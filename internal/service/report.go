@@ -24,7 +24,7 @@ type TransparencyReport struct {
 	TripsCompleted   int64   `json:"tripsCompleted"`
 	SeatsDonated     int64   `json:"seatsDonated"`
 	UniqueDrivers    int64   `json:"uniqueDrivers"`
-	UniqueRiders     int64   `json:"uniqueRiders"`
+	UniqueCommuters  int64   `json:"uniqueCommuters"`
 
 	// Attendance + retention
 	AttendanceRate   *float64 `json:"attendanceRate,omitempty"` // nil if bucket < 10
@@ -101,7 +101,7 @@ func (s *ReportService) Generate(forDate time.Time) (*TransparencyReport, error)
 	report.TripsCompleted = tripsCompleted
 	report.SeatsDonated = seatsDonated
 	report.UniqueDrivers = uniqueDrivers
-	report.UniqueRiders = uniqueRiders
+	report.UniqueCommuters = uniqueRiders
 
 	// Attendance rate — suppressed if fewer than reportBucketMin recipients.
 	if report.ActiveRecipients >= reportBucketMin {

@@ -15,6 +15,7 @@ import (
 // anonymity-of-need across the steward review process.
 type Recipient struct {
 	ID                   uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	InstitutionID        uuid.UUID  `gorm:"type:uuid;index;not null;default:'00000000-0000-0000-0000-000000000000'" json:"institutionId"`
 	UserID               uuid.UUID  `gorm:"type:uuid;uniqueIndex;not null" json:"-"`
 	PseudonymousID       string     `gorm:"uniqueIndex;not null" json:"pseudonymousId"`
 	Status               string     `gorm:"not null;default:pending;index" json:"status"`

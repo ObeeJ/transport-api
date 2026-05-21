@@ -148,6 +148,68 @@ type tripFullError struct{}
 
 func (e *tripFullError) Error() string { return "trip_full" }
 
+// DemandRow is one hub+hour bucket with fill data.
+type DemandRow struct {
+	HubID       string  `json:"hubId"`
+	HubName     string  `json:"hubName"`
+	HourSlot    int     `json:"hourSlot"` // 0-23
+	TotalSeats  int64   `json:"totalSeats"`
+	BookedSeats int64   `json:"bookedSeats"`
+	TripCount   int64   `json:"tripCount"`
+	FillRate    float64 `json:"fillRate"` // 0.0-1.0
+}
+
+// DemandByHubHour — aggregates upcoming trips (next 24 h) by hub and hour slot.
+// Returns one row per (hub, hour) that has at least one trip.
+func (r *RideRepo) DemandByHubHour() ([]DemandRow, error) {
+	type raw struct {
+		HubID       string
+		HubName     string
+		HourSlot    int
+		TotalSeats  int64
+		BookedSeats int64
+		TripCount   int64
+	}
+	var rows []raw
+	now := time.Now()
+	err := r.db.Raw(`
+		SELECT
+			h.id            AS hub_id,
+			h.name          AS hub_name,
+			EXTRACT(HOUR FROM t.departure_at)::int AS hour_slot,
+			SUM(t.total_seats)  AS total_seats,
+			COUNT(b.id)         AS booked_seats,
+			COUNT(DISTINCT t.id) AS trip_count
+		FROM trips t
+		JOIN hubs h ON h.id = t.origin_hub_id
+		LEFT JOIN bookings b ON b.trip_id = t.id AND b.status = 'booked'
+		WHERE t.status IN ('published','boarding','in_transit')
+		  AND t.departure_at BETWEEN ? AND ?
+		GROUP BY h.id, h.name, hour_slot
+		ORDER BY h.name, hour_slot
+	`, now, now.Add(24*time.Hour)).Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make([]DemandRow, 0, len(rows))
+	for _, row := range rows {
+		fill := 0.0
+		if row.TotalSeats > 0 {
+			fill = float64(row.BookedSeats) / float64(row.TotalSeats)
+		}
+		out = append(out, DemandRow{
+			HubID:       row.HubID,
+			HubName:     row.HubName,
+			HourSlot:    row.HourSlot,
+			TotalSeats:  row.TotalSeats,
+			BookedSeats: row.BookedSeats,
+			TripCount:   row.TripCount,
+			FillRate:    fill,
+		})
+	}
+	return out, nil
+}
+
 // TripSummary returns aggregate ride stats for a time window.
 func (r *RideRepo) TripSummary(from, to time.Time) (tripsCompleted, seatsDonated, uniqueDrivers, uniqueRiders int64, err error) {
 	err = r.db.Model(&models.Trip{}).

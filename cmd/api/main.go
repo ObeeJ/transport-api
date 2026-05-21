@@ -71,11 +71,17 @@ func main() {
 	}
 
 	// Email sender
-	mailer := email.New(cfg.ResendAPIKey, cfg.EmailFrom)
+	mailer := email.New(email.SMTPConfig{
+		Host:     cfg.SMTPHost,
+		Port:     cfg.SMTPPort,
+		Username: cfg.SMTPUsername,
+		Password: cfg.SMTPPassword,
+		From:     cfg.EmailFrom,
+	})
 	if mailer.Configured() {
-		slog.Info("email configured", "from", cfg.EmailFrom)
+		slog.Info("smtp email configured", "from", cfg.EmailFrom, "host", cfg.SMTPHost)
 	} else {
-		slog.Warn("email NOT configured — verification tokens will appear in notifications only (set RESEND_API_KEY)")
+		slog.Warn("email NOT configured — verification tokens will be logged server-side (set SMTP_HOST/SMTP_USERNAME/SMTP_PASSWORD)")
 	}
 
 	// --- Repositories ---
@@ -103,13 +109,13 @@ func main() {
 	walletSvc := service.NewWalletService(walletRepo, notifySvc, gdb)
 	authSvc := service.NewAuthService(userRepo, sessionRepo, cfg, mailer, gdb)
 	emailVerifySvc := service.NewEmailVerifyService(userRepo, notifySvc, mailer, cfg.AppBaseURL, gdb)
-	depositSvc := service.NewDepositService(depositRepo, paymentProvider, cfg, notifySvc, gdb)
+	depositSvc := service.NewDepositService(depositRepo, recipientRepo, paymentProvider, cfg, notifySvc, gdb)
 	poolSvc := service.NewPoolService(depositRepo)
 	recipientSvc := service.NewRecipientService(recipientRepo, paymentProvider, gdb)
 	stewardSvc := service.NewStewardService(stewardRepo, recipientRepo, notifySvc, gdb)
 	rideSvc := service.NewRideService(rideRepo, driverRepo, userRepo, seatHub, gdb)
 	driverSvc := service.NewDriverService(driverRepo, stewardRepo, rideRepo, notifySvc, gdb)
-	attendanceSvc := service.NewAttendanceService(attendanceRepo, userRepo, driverRepo, gdb)
+	attendanceSvc := service.NewAttendanceService(attendanceRepo, userRepo, driverRepo, recipientRepo, gdb)
 	payoutSvc := service.NewPayoutService(payoutRepo, recipientRepo, stewardRepo, paymentProvider, walletSvc, notifySvc, attendanceSvc, cfg.MockTransfers, gdb)
 	rosterSvc := service.NewRosterService(rosterRepo, userRepo, gdb)
 	ratingSvc := service.NewRatingService(ratingRepo, impactRepo, rideRepo, notifySvc, gdb)
@@ -238,6 +244,7 @@ func main() {
 
 	// Ride Network
 	app.Get("/hubs", authed, ridesH.ListHubs)
+	app.Get("/trips/demand", authed, ridesH.TripDemand)
 	app.Get("/trips", authed, ridesH.ListTrips)
 	app.Post("/trips", authed, ridesH.PublishTrip)
 	app.Get("/trips/:id", authed, ridesH.GetTrip)
@@ -279,6 +286,7 @@ func main() {
 	steward.Get("/drivers/queue", driverH.Queue)
 	steward.Post("/drivers/:id/decisions", driverH.Decide)
 	steward.Post("/attendance", attendanceH.Upload)
+	steward.Post("/attendance/manual", attendanceH.Manual)
 	steward.Post("/roster/import", rosterH.Import)
 	steward.Get("/roster/stats", rosterH.Stats)
 	steward.Get("/sos", sosH.Queue)
