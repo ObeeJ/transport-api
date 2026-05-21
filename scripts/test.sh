@@ -84,6 +84,22 @@ R=$(curl -c "$JAR" -b "$JAR" -s -X POST "$API/auth/login" \
   -d "{\"email\":\"$EMAIL\",\"password\":\"password123\"}")
 check "POST /auth/login (re-login) → id" "id" "$R"
 
+# ── Password reset ────────────────────────────────────────────────────────────
+echo ""
+echo "── Password reset ──"
+
+R=$(curl -c "$JAR" -b "$JAR" -s -X POST "$API/auth/password/reset/request" \
+  -H "Content-Type: application/json" \
+  -H "X-CSRF-Token: $(csrf)" \
+  -d "{\"email\":\"$EMAIL\"}")
+check "POST /auth/password/reset/request → ok" "ok" "$R"
+
+R=$(curl -c "$JAR" -b "$JAR" -s -X POST "$API/auth/password/reset/confirm" \
+  -H "Content-Type: application/json" \
+  -H "X-CSRF-Token: $(csrf)" \
+  -d '{"token":"invalid","newPassword":"newpass123"}')
+check "POST /auth/password/reset/confirm bad token → reset_token_invalid" "reset_token_invalid" "$R"
+
 # ── Public ────────────────────────────────────────────────────────────────────
 echo ""
 echo "── Public ──"
@@ -94,9 +110,9 @@ check "GET /reports/monthly → totalRaisedKobo" "totalRaisedKobo" "$R"
 R=$(curl -s "$API/pool/this-week")
 check "GET /pool/this-week → depositCount" "depositCount" "$R"
 
-# ── Protected (auth required) ─────────────────────────────────────────────────
+# ── Protected GETs ────────────────────────────────────────────────────────────
 echo ""
-echo "── Protected ──"
+echo "── Protected GETs ──"
 
 R=$(curl -c "$JAR" -b "$JAR" -s "$API/notifications")
 check "GET /notifications → array" "\[" "$R"
@@ -104,52 +120,144 @@ check "GET /notifications → array" "\[" "$R"
 R=$(curl -c "$JAR" -b "$JAR" -s "$API/wallet")
 check "GET /wallet → balanceKobo" "balanceKobo" "$R"
 
+R=$(curl -c "$JAR" -b "$JAR" -s "$API/wallet/transactions")
+check "GET /wallet/transactions → array" "\[" "$R"
+
 R=$(curl -c "$JAR" -b "$JAR" -s "$API/recipients/me")
-check "GET /recipients/me → 404 or recipient" "not_found\|recipient\|status" "$R"
+check "GET /recipients/me → not_found or status" "not_found\|status" "$R"
 
 R=$(curl -c "$JAR" -b "$JAR" -s "$API/roster/me")
-check "GET /roster/me → 404 or verified" "not_found\|verified\|studentId" "$R"
+check "GET /roster/me → not_found or verified" "not_found\|verified" "$R"
 
 R=$(curl -c "$JAR" -b "$JAR" -s "$API/driver/me")
-check "GET /driver/me → 404 or driver" "not_found\|driver\|status" "$R"
+check "GET /driver/me → not_found or status" "not_found\|status" "$R"
+
+R=$(curl -c "$JAR" -b "$JAR" -s "$API/driver/impact")
+check "GET /driver/impact → not_found or impact" "not_found\|impact\|trips" "$R"
+
+R=$(curl -c "$JAR" -b "$JAR" -s "$API/driver/average")
+check "GET /driver/average → not_found or average" "not_found\|average\|score" "$R"
 
 R=$(curl -c "$JAR" -b "$JAR" -s "$API/attendance/me")
-check "GET /attendance/me → array or empty" "\[\|attendance" "$R"
+check "GET /attendance/me → array or object" "\[\|week\|attendance" "$R"
 
 R=$(curl -c "$JAR" -b "$JAR" -s "$API/trips")
 check "GET /trips → array" "\[" "$R"
+
+R=$(curl -c "$JAR" -b "$JAR" -s "$API/trips/demand")
+check "GET /trips/demand → object" ".\+" "$R"
 
 R=$(curl -c "$JAR" -b "$JAR" -s "$API/hubs")
 check "GET /hubs → array" "\[" "$R"
 
 R=$(curl -c "$JAR" -b "$JAR" -s "$API/notes")
-check "GET /notes → array" "\[" "$R"
+check "GET /notes → items" "items" "$R"
 
-# ── Auth-required returns 401 without cookie ──────────────────────────────────
+R=$(curl -c "$JAR" -b "$JAR" -s "$API/ride/bookings")
+check "GET /ride/bookings → array" "\[" "$R"
+
+R=$(curl -c "$JAR" -b "$JAR" -s "$API/drive/trips")
+check "GET /drive/trips → array" "\[" "$R"
+
+R=$(curl -c "$JAR" -b "$JAR" -s "$API/banks")
+check "GET /banks → array or not_configured" "\[\|not_configured\|payments" "$R"
+
+# ── Write paths ───────────────────────────────────────────────────────────────
+echo ""
+echo "── Write paths ──"
+
+R=$(curl -c "$JAR" -b "$JAR" -s -X POST "$API/notes" \
+  -H "Content-Type: application/json" \
+  -H "X-CSRF-Token: $(csrf)" \
+  -d '{"body":"Keep going, you are doing great!"}')
+check "POST /notes → id" "id" "$R"
+
+R=$(curl -c "$JAR" -b "$JAR" -s -X POST "$API/recipients/apply" \
+  -H "Content-Type: application/json" \
+  -H "X-CSRF-Token: $(csrf)" \
+  -d '{"weeklyCost":5000,"disbursementMethod":"wallet","reason":"I need transport support"}')
+check "POST /recipients/apply unverified → email_not_verified" "email_not_verified" "$R"
+
+R=$(curl -c "$JAR" -b "$JAR" -s -X POST "$API/driver/apply" \
+  -H "Content-Type: application/json" \
+  -H "X-CSRF-Token: $(csrf)" \
+  -d '{"vehicleType":"car","plateNumber":"ABC-123DE","seats":4}')
+check "POST /driver/apply → id or already_applied" "id\|already" "$R"
+
+R=$(curl -c "$JAR" -b "$JAR" -s -X POST "$API/trips" \
+  -H "Content-Type: application/json" \
+  -H "X-CSRF-Token: $(csrf)" \
+  -d '{"hubName":"Iyana-Ipaja","destination":"Unilag","departureAt":"2026-12-01T08:00:00Z","seats":4,"priceKobo":50000}')
+check "POST /trips unapproved driver → driver_not_approved" "driver_not_approved" "$R"
+
+R=$(curl -c "$JAR" -b "$JAR" -s -X POST "$API/wallet/debit" \
+  -H "Content-Type: application/json" \
+  -H "X-CSRF-Token: $(csrf)" \
+  -d '{"amountKobo":100000,"description":"test debit"}')
+check "POST /wallet/debit insufficient → insufficient_balance\|not_found" "insufficient_balance\|not_found" "$R"
+
+R=$(curl -c "$JAR" -b "$JAR" -s -X POST "$API/wallet/withdraw" \
+  -H "Content-Type: application/json" \
+  -H "X-CSRF-Token: $(csrf)" \
+  -d '{"amountKobo":100000}')
+check "POST /wallet/withdraw no recipient → not_found\|not_approved\|no_bank" "not_found\|not_approved\|no_bank" "$R"
+
+# ── Notification actions ───────────────────────────────────────────────────────
+echo ""
+echo "── Notifications ──"
+
+R=$(curl -c "$JAR" -b "$JAR" -s -X POST "$API/notifications/read-all" \
+  -H "X-CSRF-Token: $(csrf)")
+check "POST /notifications/read-all → ok" "ok" "$R"
+
+R=$(curl -c "$JAR" -b "$JAR" -s -X POST "$API/notifications/nonexistent-id/read" \
+  -H "X-CSRF-Token: $(csrf)")
+check "POST /notifications/:id/read bad id → not_found\|error" "not_found\|error" "$R"
+
+# ── Trip actions on nonexistent trip ─────────────────────────────────────────
+echo ""
+echo "── Trip actions ──"
+
+FAKE_ID="00000000-0000-0000-0000-000000000000"
+
+R=$(curl -c "$JAR" -b "$JAR" -s "$API/trips/$FAKE_ID")
+check "GET /trips/:id not found → trip_not_found" "trip_not_found" "$R"
+
+R=$(curl -c "$JAR" -b "$JAR" -s -X POST "$API/trips/$FAKE_ID/bookings" \
+  -H "Content-Type: application/json" \
+  -H "X-CSRF-Token: $(csrf)" \
+  -d '{"seats":1}')
+check "POST /trips/:id/bookings not found → trip_not_found" "trip_not_found" "$R"
+
+R=$(curl -c "$JAR" -b "$JAR" -s -X POST "$API/trips/$FAKE_ID/ratings" \
+  -H "Content-Type: application/json" \
+  -H "X-CSRF-Token: $(csrf)" \
+  -d '{"score":5}')
+check "POST /trips/:id/ratings not found → error" "not_found\|not_allowed\|invalid_subject" "$R"
+
+R=$(curl -c "$JAR" -b "$JAR" -s -X POST "$API/trips/$FAKE_ID/sos" \
+  -H "Content-Type: application/json" \
+  -H "X-CSRF-Token: $(csrf)" \
+  -d '{"message":"help"}')
+check "POST /trips/:id/sos not found → trip_not_found\|not_found" "trip_not_found\|not_found" "$R"
+
+# ── 401 guards ────────────────────────────────────────────────────────────────
 echo ""
 echo "── 401 guards ──"
 
-for path in /notifications /wallet /recipients/me /roster/me /driver/me /trips /hubs /notes; do
+for path in /notifications /wallet /wallet/transactions /recipients/me /roster/me /driver/me /trips /hubs /notes /ride/bookings /drive/trips /banks; do
   R=$(curl -s "$API$path")
   check "GET $path no cookie → not_authenticated" "not_authenticated" "$R"
 done
 
-# ── Steward role gate ─────────────────────────────────────────────────────────
+# ── Steward gate ──────────────────────────────────────────────────────────────
 echo ""
 echo "── Steward gate ──"
 
-R=$(curl -c "$JAR" -b "$JAR" -s "$API/steward/queue")
-check "GET /steward/queue as member → steward_required" "steward_required" "$R"
-
-# ── Password reset ────────────────────────────────────────────────────────────
-echo ""
-echo "── Password reset ──"
-
-R=$(curl -c "$JAR" -b "$JAR" -s -X POST "$API/auth/password/reset/request" \
-  -H "Content-Type: application/json" \
-  -H "X-CSRF-Token: $(csrf)" \
-  -d "{\"email\":\"$EMAIL\"}")
-check "POST /auth/password/reset/request → ok" "ok" "$R"
+for path in /steward/queue /steward/audit /steward/payouts /steward/sos /steward/appeals; do
+  R=$(curl -c "$JAR" -b "$JAR" -s "$API$path")
+  check "GET $path as member → steward_required" "steward_required" "$R"
+done
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
