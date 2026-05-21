@@ -8,6 +8,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/obeej/akin/internal/config"
+	"github.com/obeej/akin/internal/middleware"
 	"github.com/obeej/akin/internal/service"
 )
 
@@ -17,14 +18,23 @@ func setSessionCookie(c *fiber.Ctx, cfg *config.Config, token string, expires ti
 	if prod {
 		sameSite = "None"
 	}
-	c.Cookie(&fiber.Cookie{
-		Name:     cfg.SessionCookieName,
-		Value:    token,
-		Path:     "/",
-		Expires:  expires,
-		HTTPOnly: true,
-		SameSite: sameSite,
-		Secure:   prod,
+	// We compute Max-Age from Expires rather than using the Expires
+	// attribute directly — modern browsers prefer Max-Age and our cookie
+	// helper doesn't render absolute dates. For our session TTL (hours
+	// to weeks) Max-Age is a clean fit.
+	maxAge := int(time.Until(expires).Seconds())
+	if maxAge < 0 {
+		maxAge = 0
+	}
+	middleware.SetCookie(c, middleware.CookieOpts{
+		Name:        cfg.SessionCookieName,
+		Value:       token,
+		Path:        "/",
+		MaxAge:      maxAge,
+		SameSite:    sameSite,
+		Secure:      prod,
+		HTTPOnly:    true,
+		Partitioned: prod, // CHIPS — required for cross-site cookie under Firefox TCP + Chrome 3PCD.
 	})
 }
 
