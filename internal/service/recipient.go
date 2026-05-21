@@ -14,26 +14,29 @@ import (
 )
 
 var (
-	ErrAlreadyApplied          = errors.New("already_applied")
-	ErrRecipientNotFound       = errors.New("recipient_not_found")
-	ErrRecipientNotApproved    = errors.New("recipient_not_approved")
-	ErrNoBankOnFile            = errors.New("no_bank_on_file")
-	ErrWeeklyCostTooSmall      = errors.New("weekly_cost_too_small")
+	ErrAlreadyApplied            = errors.New("already_applied")
+	ErrRecipientNotFound         = errors.New("recipient_not_found")
+	ErrRecipientNotApproved      = errors.New("recipient_not_approved")
+	ErrNoBankOnFile              = errors.New("no_bank_on_file")
+	ErrWeeklyCostTooSmall        = errors.New("weekly_cost_too_small")
 	ErrInvalidDisbursementMethod = errors.New("invalid_disbursement_method")
-	ErrPseudonymFailed         = errors.New("pseudonym_failed")
-	ErrEmailNotVerified        = errors.New("email_not_verified")
+	ErrPseudonymFailed           = errors.New("pseudonym_failed")
+	ErrEmailNotVerified          = errors.New("email_not_verified")
+	// ErrStewardCannotReceive — enforces the plan's zero-tolerance separation:
+	// anyone in the steward role cannot also be a recipient. Blocks at apply
+	// time so the conflict-of-interest never gets a foothold.
+	ErrStewardCannotReceive = errors.New("steward_cannot_receive")
 )
-
-var validDisbursementMethods = map[string]bool{"wallet": true, "bank": true}
 
 type RecipientService struct {
 	repo     *repository.RecipientRepo
+	users    *repository.UserRepo
 	payments payments.DisbursementProvider
 	db       *gorm.DB
 }
 
-func NewRecipientService(repo *repository.RecipientRepo, p payments.DisbursementProvider, db *gorm.DB) *RecipientService {
-	return &RecipientService{repo: repo, payments: p, db: db}
+func NewRecipientService(repo *repository.RecipientRepo, users *repository.UserRepo, p payments.DisbursementProvider, db *gorm.DB) *RecipientService {
+	return &RecipientService{repo: repo, users: users, payments: p, db: db}
 }
 
 type ApplyInput struct {
@@ -47,12 +50,21 @@ func (s *RecipientService) Apply(input ApplyInput) (*models.Recipient, error) {
 	if input.WeeklyCostKobo < 100 {
 		return nil, ErrWeeklyCostTooSmall
 	}
-	if input.DisbursementMethod == "" {
-		input.DisbursementMethod = "wallet"
+
+	// Zero-tolerance separation: stewards cannot also be recipients.
+	// Checked at the entry point so the conflict never gets recorded.
+	if s.users != nil {
+		if u, err := s.users.FindByID(input.UserID); err == nil && u.IsSteward() {
+			return nil, ErrStewardCannotReceive
+		}
 	}
-	if !validDisbursementMethods[input.DisbursementMethod] {
-		return nil, ErrInvalidDisbursementMethod
-	}
+
+	// DisbursementMethod is no longer a user choice. Every approved
+	// recipient is credited to their internal wallet; they withdraw to
+	// their own bank account via /wallet/withdraw on their own schedule.
+	// The Recipient.DisbursementMethod column stays for historical rows
+	// but is hardcoded "wallet" for new applications.
+	method := "wallet"
 
 	// Idempotent — return existing record if already applied.
 	if existing, err := s.repo.FindByUserID(input.UserID); err == nil {
@@ -68,7 +80,7 @@ func (s *RecipientService) Apply(input ApplyInput) (*models.Recipient, error) {
 		UserID:               input.UserID,
 		PseudonymousID:       pseudo,
 		Status:               "pending",
-		DisbursementMethod:   input.DisbursementMethod,
+		DisbursementMethod:   method,
 		IntakeWeeklyCostKobo: input.WeeklyCostKobo,
 		IntakeSituation:      input.Situation,
 	}
@@ -77,8 +89,7 @@ func (s *RecipientService) Apply(input ApplyInput) (*models.Recipient, error) {
 	}
 
 	audit.Record(s.db, input.UserID.String(), "recipient_applied", r.ID.String(), map[string]any{
-		"pseudonymousId":     r.PseudonymousID,
-		"disbursementMethod": r.DisbursementMethod,
+		"pseudonymousId": r.PseudonymousID,
 	})
 	return r, nil
 }

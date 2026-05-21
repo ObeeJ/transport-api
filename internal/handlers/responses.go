@@ -87,12 +87,13 @@ func toRecipientResponse(r *models.Recipient) recipientResponse {
 	}
 }
 
-// approvedRecipientResponse — steward payout view, includes bank info.
+// approvedRecipientResponse — steward payout view. AccountName is
+// deliberately excluded — stewards must never correlate a real name
+// with a pseudonymous ID.
 type approvedRecipientResponse struct {
 	recipientResponse
-	HasBank     bool   `json:"hasBank"`
-	BankName    string `json:"bankName,omitempty"`
-	AccountName string `json:"accountName,omitempty"`
+	HasBank  bool   `json:"hasBank"`
+	BankName string `json:"bankName,omitempty"`
 }
 
 func toApprovedRecipientResponse(ar service.ApprovedRecipient) approvedRecipientResponse {
@@ -100,6 +101,5 @@ func toApprovedRecipientResponse(ar service.ApprovedRecipient) approvedRecipient
 		recipientResponse: toRecipientResponse(&ar.Recipient),
 		HasBank:           ar.HasBank,
 		BankName:          ar.BankName,
-		AccountName:       ar.AccountName,
 	}
 }

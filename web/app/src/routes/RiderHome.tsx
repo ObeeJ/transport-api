@@ -53,7 +53,7 @@ function minutesFromNow(iso: string): string {
 }
 
 // Peak travel slots derived from real /trips/demand data
-const heatMapHours = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+const heatMapHours = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
 
 type DemandRow = {
   hubId: string
@@ -86,7 +86,10 @@ export function RiderHome() {
   const demand = useQuery<{ items: DemandRow[] }>({
     queryKey: ['trips', 'demand'],
     queryFn: () => api.get('/trips/demand'),
-    refetchInterval: 30_000,
+    refetchInterval: (query) => {
+      const hasData = (query.state.data as { items: DemandRow[] } | undefined)?.items?.length ?? 0
+      return hasData > 0 ? 30_000 : 5 * 60_000
+    },
   })
 
   // Build a lookup: hubName -> hourSlot -> DemandRow
@@ -105,12 +108,11 @@ export function RiderHome() {
     staleTime: 10 * 60 * 1000,
   })
 
-  // Derive hub names from real demand data, fall back to hub list
+  // Derive hub names strictly from real demand data only — no fallback to hub list
+  // so the grid never renders with hubs but no trip data
   const demandHubs = useMemo(() => {
-    const fromDemand = [...new Set(demand.data?.items.map(r => r.hubName) ?? [])]
-    if (fromDemand.length > 0) return fromDemand
-    return hubs.data?.items.map(h => h.name) ?? []
-  }, [demand.data, hubs.data])
+    return [...new Set(demand.data?.items.map(r => r.hubName) ?? [])]
+  }, [demand.data])
   const trips = useQuery<{ items: TripCard[] }>({
     queryKey: ['trips', hubFilter],
     queryFn: () => api.get(`/trips${hubFilter ? `?hubId=${hubFilter}` : ''}`),
@@ -194,20 +196,36 @@ export function RiderHome() {
           </span>
         </div>
 
-        {demand.isLoading ? (
-          <div className="mt-5 text-[11px] text-[var(--color-stone)] text-center py-4">Loading demand data…</div>
+        {!demand.data ? (
+          demand.isLoading ? (
+            <div className="mt-5 grid grid-cols-12 gap-1">
+              {Array.from({ length: 12 }).map((_, i) => (
+                <div key={i} className="h-[64px] rounded-lg bg-[var(--color-cream-2)] animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <div className="mt-5 py-6 text-center">
+              <p className="text-[13px] font-medium text-[var(--color-indigo)]">No trips scheduled yet</p>
+              <p className="mt-1 text-[11px] text-[var(--color-stone)]">
+                This map fills up when drivers publish trips. Check back closer to peak hours.
+              </p>
+            </div>
+          )
         ) : demandHubs.length === 0 ? (
-          <div className="mt-5 text-[11px] text-[var(--color-stone)] text-center py-4">No active trips in the next 24 hours.</div>
+          <div className="mt-5 py-6 text-center">
+            <p className="text-[13px] font-medium text-[var(--color-indigo)]">No trips in the next 24 hours</p>
+            <p className="mt-1 text-[11px] text-[var(--color-stone)]">Check back closer to peak hours or ask a driver to publish a ride.</p>
+          </div>
         ) : (
           <div className="mt-5 space-y-3">
             {/* Header Row */}
-            <div className="grid grid-cols-[80px_1fr] gap-3 items-center">
+            <div className="grid grid-cols-[72px_1fr] gap-2 items-center">
               <span className="text-[9px] font-mono text-[var(--color-stone)] font-bold uppercase tracking-wider">Hub</span>
-              <div className="flex gap-1 overflow-x-auto">
+              <div className="grid grid-cols-12 gap-1">
                 {heatMapHours.map(hr => (
                   <div
                     key={hr}
-                    className={`shrink-0 w-8 text-center text-[9px] font-mono font-semibold transition-colors duration-150 py-0.5 rounded ${
+                    className={`text-center text-[9px] font-mono font-semibold transition-colors duration-150 py-0.5 rounded ${
                       active?.hour === hr ? 'text-[var(--color-moss)] bg-[var(--color-moss)]/5' : 'text-[var(--color-stone)]'
                     }`}
                   >
@@ -218,9 +236,9 @@ export function RiderHome() {
             </div>
 
             {/* Hub Rows */}
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {demandHubs.map(hubName => (
-                <div key={hubName} className="grid grid-cols-[80px_1fr] gap-3 items-center">
+                <div key={hubName} className="grid grid-cols-[72px_1fr] gap-2 items-center">
                   <span className={`text-[10px] font-medium transition-all duration-150 py-1 rounded truncate text-left ${
                     active?.hub === hubName
                       ? 'text-[var(--color-moss)] font-bold bg-[var(--color-moss)]/5 pl-1.5'
@@ -228,7 +246,7 @@ export function RiderHome() {
                   }`}>
                     {hubName}
                   </span>
-                  <div className="flex gap-1 overflow-x-auto">
+                  <div className="grid grid-cols-12 gap-1">
                     {heatMapHours.map(hr => {
                       const row = demandMap[hubName]?.[hr] ?? null
                       const val = fillToHeat(row?.fillRate ?? 0, row?.tripCount ?? 0)
@@ -245,20 +263,20 @@ export function RiderHome() {
                           }}
                           onMouseEnter={() => setActiveCell({ hub: hubName, hour: hr, val, row })}
                           onMouseLeave={() => setActiveCell(null)}
-                          className={`shrink-0 w-8 h-[72px] flex flex-col justify-between items-center py-2 rounded-lg cursor-pointer border select-none transition-all duration-200 ${
+                          className={`h-[64px] flex flex-col justify-between items-center py-1.5 rounded-lg cursor-pointer border select-none transition-all duration-200 ${
                             isActive
                               ? 'border-[var(--color-moss)] ring-2 ring-[var(--color-moss)] ring-offset-1 bg-white shadow-md z-10'
                               : 'border-[var(--color-hairline)] bg-[var(--color-paper)]/60 hover:bg-white/90 hover:border-[var(--color-stone-soft)] shadow-sm'
                           } ${isSelected ? 'animate-pulse' : ''}`}
                         >
                           <span className="text-[8px] font-mono text-[var(--color-stone-soft)] leading-none">{hr}h</span>
-                          <div className="w-1.5 h-6 bg-[var(--color-cream-2)]/60 rounded-full overflow-hidden relative">
+                          <div className="w-1.5 h-5 bg-[var(--color-cream-2)]/60 rounded-full overflow-hidden relative">
                             <div
                               className={`absolute bottom-0 left-0 w-full rounded-full transition-all duration-300 heat-rider-${val}`}
                               style={{ height: row ? `${Math.max(row.fillRate * 100, 8)}%` : '8%' }}
                             />
                           </div>
-                          <span className="text-[9px] font-mono font-bold text-[var(--color-indigo)] leading-none">
+                          <span className="text-[8px] font-mono font-bold text-[var(--color-indigo)] leading-none">
                             {row ? row.tripCount : '—'}
                           </span>
                         </motion.div>
@@ -271,66 +289,70 @@ export function RiderHome() {
           </div>
         )}
 
-        {/* Telemetry Panel */}
-        <div className="card-base p-3.5 mt-4 border border-[var(--color-hairline)] bg-[var(--color-paper)]/50 relative overflow-hidden">
-          <AnimatePresence mode="wait">
-            {active ? (
-              <motion.div
-                key={`${active.hub}-${active.hour}`}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
-              >
-                <div className="flex items-center gap-2">
-                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 heat-rider-${active.val} ${active.val === 4 ? 'animate-pulse ring-2 ring-[var(--color-moss)]/30' : ''}`} />
-                  <div>
-                    <span className="text-xs font-semibold text-[var(--color-indigo)]">
-                      {active.hub} at {active.hour}:00
-                    </span>
-                    {active.row ? (
-                      <p className="text-[10px] text-[var(--color-stone)]">
-                        {active.row.tripCount} trip{active.row.tripCount !== 1 ? 's' : ''} · {active.row.bookedSeats}/{active.row.totalSeats} seats booked · {Math.round(active.row.fillRate * 100)}% full
-                      </p>
-                    ) : (
-                      <p className="text-[10px] text-[var(--color-stone)]">No trips scheduled at this hour.</p>
+        {/* Telemetry Panel — only when grid is visible */}
+        {demandHubs.length > 0 && (
+          <div className="card-base p-3.5 mt-4 border border-[var(--color-hairline)] bg-[var(--color-paper)]/50 relative overflow-hidden">
+            <AnimatePresence mode="wait">
+              {active ? (
+                <motion.div
+                  key={`${active.hub}-${active.hour}`}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 heat-rider-${active.val} ${active.val === 4 ? 'animate-pulse ring-2 ring-[var(--color-moss)]/30' : ''}`} />
+                    <div>
+                      <span className="text-xs font-semibold text-[var(--color-indigo)]">
+                        {active.hub} at {active.hour}:00
+                      </span>
+                      {active.row ? (
+                        <p className="text-[10px] text-[var(--color-stone)]">
+                          {active.row.tripCount} trip{active.row.tripCount !== 1 ? 's' : ''} · {active.row.bookedSeats}/{active.row.totalSeats} seats booked · {Math.round(active.row.fillRate * 100)}% full
+                        </p>
+                      ) : (
+                        <p className="text-[10px] text-[var(--color-stone)]">No trips scheduled at this hour.</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                    <div className="text-right">
+                      <span className="text-[10px] uppercase font-mono tracking-wider text-[var(--color-stone)] block">Seats left</span>
+                      <span className="text-xs font-bold text-[var(--color-moss)] font-mono">
+                        {active.row ? active.row.totalSeats - active.row.bookedSeats : '—'}
+                      </span>
+                    </div>
+                    {selectedCell && (
+                      <button
+                        onClick={e => { e.stopPropagation(); setSelectedCell(null) }}
+                        className="text-[10px] text-[var(--color-stone)] hover:text-[var(--color-coral)] font-mono px-2 py-1 rounded bg-[var(--color-cream-2)] border border-[var(--color-hairline)] transition-colors cursor-pointer"
+                      >
+                        clear ×
+                      </button>
                     )}
                   </div>
+                </motion.div>
+              ) : (
+                <div className="text-[var(--color-stone)] text-[10px] uppercase tracking-wider flex items-center justify-center gap-2 py-1 w-full text-center">
+                  <span className="animate-pulse w-1.5 h-1.5 rounded-full bg-[var(--color-stone-soft)]" />
+                  <span>Tap or hover an hourly pillar to see live trip data</span>
                 </div>
-                <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
-                  <div className="text-right">
-                    <span className="text-[10px] uppercase font-mono tracking-wider text-[var(--color-stone)] block">Seats left</span>
-                    <span className="text-xs font-bold text-[var(--color-moss)] font-mono">
-                      {active.row ? active.row.totalSeats - active.row.bookedSeats : '—'}
-                    </span>
-                  </div>
-                  {selectedCell && (
-                    <button
-                      onClick={e => { e.stopPropagation(); setSelectedCell(null) }}
-                      className="text-[10px] text-[var(--color-stone)] hover:text-[var(--color-coral)] font-mono px-2 py-1 rounded bg-[var(--color-cream-2)] border border-[var(--color-hairline)] transition-colors cursor-pointer"
-                    >
-                      clear ×
-                    </button>
-                  )}
-                </div>
-              </motion.div>
-            ) : (
-              <div className="text-[var(--color-stone)] text-[10px] uppercase tracking-wider flex items-center justify-center gap-2 py-1 w-full text-center">
-                <span className="animate-pulse w-1.5 h-1.5 rounded-full bg-[var(--color-stone-soft)]" />
-                <span>Tap or hover an hourly pillar to see live trip data</span>
-              </div>
-            )}
-          </AnimatePresence>
-        </div>
-
-        {/* Legend */}
-        <div className="mt-4 flex items-center justify-between text-[9px] text-[var(--color-stone)] font-mono">
-          <span>Low demand</span>
-          <div className="flex gap-1.5">
-            {[0,1,2,3,4].map(v => <span key={v} className={`size-2.5 rounded-[2px] heat-rider-${v} ${v === 0 ? 'border border-[var(--color-hairline)]' : ''}`} />)}
+              )}
+            </AnimatePresence>
           </div>
-          <span>High demand</span>
-        </div>
+        )}
+
+        {/* Legend — only when grid is visible */}
+        {demandHubs.length > 0 && (
+          <div className="mt-4 flex items-center justify-between text-[9px] text-[var(--color-stone)] font-mono">
+            <span>Low demand</span>
+            <div className="flex gap-1.5">
+              {[0,1,2,3,4].map(v => <span key={v} className={`size-2.5 rounded-[2px] heat-rider-${v} ${v === 0 ? 'border border-[var(--color-hairline)]' : ''}`} />)}
+            </div>
+            <span>High demand</span>
+          </div>
+        )}
       </motion.section>
 
       {/* Find a ride header */}

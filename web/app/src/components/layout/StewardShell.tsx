@@ -1,5 +1,5 @@
 import { NavLink, Outlet, Link, useLocation } from 'react-router'
-import { AnimatePresence, motion } from 'motion/react'
+import { motion } from 'motion/react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth'
 import { useBreakpoint } from '@/lib/useBreakpoint'
@@ -259,18 +259,16 @@ export function StewardShell() {
           'flex-1 bg-[var(--color-cream)]',
           isMobile ? 'px-5 py-6' : bp === 'tablet' ? 'px-6 py-6' : 'px-[150px] py-8',
         )}>
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div
-              key={location.pathname}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.16, ease: [0.25, 0.1, 0.25, 1] }}
-              className={bp === 'desktop' ? 'max-w-[860px] mx-auto' : undefined}
-            >
-              <Outlet />
-            </motion.div>
-          </AnimatePresence>
+          {/* See the long comment in RoleShell for why we don't use
+              AnimatePresence + mode="wait" around <Outlet/>. Same fix here. */}
+          <motion.div
+            key={location.pathname}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.16, ease: [0.25, 0.1, 0.25, 1] }}
+          >
+            <Outlet />
+          </motion.div>
         </main>
       </div>
     </div>

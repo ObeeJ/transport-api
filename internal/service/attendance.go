@@ -196,6 +196,11 @@ func (s *AttendanceService) ForUser(userID uuid.UUID, weeks int) ([]AttendanceCe
 	return out, nil
 }
 
+// Was exposes the underlying repo Was check for use by other services.
+func (s *AttendanceService) Was(userID uuid.UUID, weekStart time.Time) (bool, bool, error) {
+	return s.repo.Was(userID, weekStart)
+}
+
 // EligibleForPayout — gate used by PayoutService.Initiate.
 //
 // A recipient is eligible for the *current* week's payout if EITHER source

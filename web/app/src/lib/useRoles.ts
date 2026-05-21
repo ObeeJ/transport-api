@@ -54,3 +54,29 @@ export const roleRoutes: Record<Role, string> = {
   driver: '/drive',
   steward: '/steward',
 }
+
+// Active-role memory — used so shared pages (Account, Notifications) can
+// render the shell of whatever rail the user came from instead of always
+// flipping to giver. Persists across reloads via sessionStorage; falls
+// back to giver when nothing is stored or in-memory only when storage is
+// unavailable (e.g. private mode).
+const ACTIVE_ROLE_KEY = 'akin.activeRole'
+const SHARED_ROLES: Role[] = ['giver', 'commuter', 'driver', 'steward']
+
+export function setActiveRole(role: Role): void {
+  try {
+    sessionStorage.setItem(ACTIVE_ROLE_KEY, role)
+  } catch {
+    // sessionStorage can throw in private mode / when disabled; ignore.
+  }
+}
+
+export function getActiveRole(): Role {
+  try {
+    const v = sessionStorage.getItem(ACTIVE_ROLE_KEY)
+    if (v && (SHARED_ROLES as string[]).includes(v)) return v as Role
+  } catch {
+    /* ignore */
+  }
+  return 'giver'
+}
