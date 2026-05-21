@@ -24,7 +24,8 @@ export function Onboarding() {
     setSubmitting(true)
     try {
       if (mode === 'signup') {
-        await signup({ email, firstName, lastName, phone, password })
+        const normalizedPhone = '+234' + phone.replace(/\D/g, '').replace(/^0/, '')
+        await signup({ email, firstName, lastName, phone: normalizedPhone, password })
       } else {
         await login({ email, password })
       }
