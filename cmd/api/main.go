@@ -171,7 +171,16 @@ func main() {
 	healthH := handlers.NewHealthHandler(gdb, rdb)
 	app.Get("/healthz", healthH.Live)
 	app.Get("/readyz", healthH.Ready)
-	app.Get("/auth/csrf", func(c *fiber.Ctx) error { return c.JSON(fiber.Map{"ok": true}) })
+	// /auth/csrf — frontends call this once on boot to obtain the
+	// double-submit token in the JSON body. Necessary because Firefox
+	// Total Cookie Protection and Chrome's 3PCD partition prevent
+	// document.cookie from reading the cross-site cookie from JS, even
+	// though the cookie is still SENT on requests. CSRFCookie middleware
+	// publishes the effective token via c.Locals(middleware.CSRFLocalKey).
+	app.Get("/auth/csrf", func(c *fiber.Ctx) error {
+		tok, _ := c.Locals(middleware.CSRFLocalKey).(string)
+		return c.JSON(fiber.Map{"token": tok})
+	})
 
 	// --- Rate limiters ---
 	// Auth: 10 attempts / 5 min, keyed by (IP + email) so a shared NAT doesn't
