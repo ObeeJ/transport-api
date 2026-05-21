@@ -56,6 +56,11 @@ func (r *Reconciler) loop(ctx context.Context) {
 	}
 }
 
+// RunOnce executes all reconciler sweeps immediately. Used in tests.
+func (r *Reconciler) RunOnce() {
+	r.run()
+}
+
 func (r *Reconciler) run() {
 	r.expireStalePendingDeposits()
 	r.expireStalePendingPayouts()

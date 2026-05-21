@@ -259,7 +259,24 @@ for path in /steward/queue /steward/audit /steward/payouts /steward/sos /steward
   check "GET $path as member → steward_required" "steward_required" "$R"
 done
 
-# ── Roster ───────────────────────────────────────────────────────────────────
+# ── Rate limiting ────────────────────────────────────────────────────────────
+echo ""
+echo "── Rate limiting ──"
+
+# Hit /auth/login 11 times with CSRF cookie but wrong creds to exhaust the limiter
+for i in $(seq 1 11); do
+  curl -c "$JAR" -b "$JAR" -s -X POST "$API/auth/login" \
+    -H "Content-Type: application/json" \
+    -H "X-CSRF-Token: $(csrf)" \
+    -d '{"email":"ratelimit@example.com","password":"wrongpass"}' > /dev/null
+done
+R=$(curl -c "$JAR" -b "$JAR" -s -X POST "$API/auth/login" \
+  -H "Content-Type: application/json" \
+  -H "X-CSRF-Token: $(csrf)" \
+  -d '{"email":"ratelimit@example.com","password":"wrongpass"}')
+check "POST /auth/login rate limited → too_many_auth_attempts" "too_many_auth_attempts" "$R"
+
+
 echo ""
 echo "── Roster ──"
 
