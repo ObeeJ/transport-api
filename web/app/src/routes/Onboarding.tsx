@@ -9,23 +9,30 @@ type Mode = 'signup' | 'login'
 export function Onboarding() {
   const navigate = useNavigate()
   const { signup, login } = useAuth()
-  const [mode, setMode] = useState<Mode>('signup')
+  // Default to login: most arrivals are returning users. New users tap
+  // "Create account" once; the choice survives the next render via state.
+  const [mode, setMode] = useState<Mode>('login')
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
+  const [acceptedPrivacy, setAcceptedPrivacy] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
+    if (mode === 'signup' && !acceptedPrivacy) {
+      setError('Please read and accept the Privacy Promise to create an account.')
+      return
+    }
     setSubmitting(true)
     try {
       if (mode === 'signup') {
         const normalizedPhone = '+234' + phone.replace(/\D/g, '').replace(/^0/, '')
-        await signup({ email, firstName, lastName, phone: normalizedPhone, password })
+        await signup({ email, firstName, lastName, phone: normalizedPhone, password, acceptedPrivacy })
       } else {
         await login({ email, password })
       }
@@ -149,17 +156,43 @@ export function Onboarding() {
 
       <div className="flex-1" />
 
+      {mode === 'signup' ? (
+        <label className="mt-6 flex items-start gap-3 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={acceptedPrivacy}
+            onChange={(e) => setAcceptedPrivacy(e.target.checked)}
+            className="mt-[3px] h-4 w-4 accent-[var(--color-indigo)] shrink-0 cursor-pointer"
+          />
+          <span className="text-[12px] leading-relaxed text-[var(--color-stone)]">
+            I’ve read and agree to the{' '}
+            <Link to="/privacy" target="_blank" rel="noopener noreferrer" className="text-[var(--color-ink)] underline underline-offset-[3px]">
+              Privacy Promise
+            </Link>
+            . Akin will only hold what’s needed to run the class fund and ride
+            network, and never sell or share my data for anything else.
+          </span>
+        </label>
+      ) : null}
+
       <button
         type="submit"
-        disabled={submitting}
-        className="btn-primary w-full mt-8 h-[52px]"
+        disabled={submitting || (mode === 'signup' && !acceptedPrivacy)}
+        className="btn-primary w-full mt-6 h-[52px]"
       >
-        {submitting ? 'Working…' : mode === 'signup' ? 'Continue' : 'Sign in'}
+        {submitting ? 'Working…' : mode === 'signup' ? 'Create account' : 'Sign in'}
       </button>
-      <p className="text-center text-[11px] mt-4 text-[var(--color-stone)]">
-        By continuing you accept our{' '}
-        <a className="text-[var(--color-ink)] underline underline-offset-[3px]">privacy promise</a>.
-      </p>
+
+      {mode === 'login' ? (
+        <p className="text-center text-[11px] mt-4 text-[var(--color-stone)]">
+          By signing in you confirm our{' '}
+          <Link to="/privacy" className="text-[var(--color-ink)] underline underline-offset-[3px]">
+            Privacy Promise
+          </Link>
+          .
+        </p>
+      ) : null}
+
       {mode === 'login' ? (
         <Link
           to="/reset-password"
@@ -198,6 +231,8 @@ function humanizeError(code: string): string {
       return 'Password must be at least 8 characters.'
     case 'invalid_credentials':
       return 'Email or password is incorrect.'
+    case 'privacy_required':
+      return 'Please accept the Privacy Promise to continue.'
     default:
       return 'Could not complete. Please try again.'
   }

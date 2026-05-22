@@ -467,6 +467,21 @@ export function RoleShell({ role }: { role: Role }) {
           >
             <Outlet />
           </motion.div>
+
+          {/*
+            Subtle footer with the Privacy Promise link. Lives inside <main>
+            so it sits below page content but above the fixed bottom nav on
+            mobile (which has its own padding allowance via pb-24 on main).
+          */}
+          <footer className="mt-12 pt-6 border-t border-[var(--color-hairline)] flex items-center justify-between text-[10px] text-[var(--color-stone-soft)]">
+            <span>© akin</span>
+            <Link
+              to="/privacy"
+              className="hover:text-[var(--color-stone)] transition-colors"
+            >
+              Privacy promise
+            </Link>
+          </footer>
         </main>
 
         {/* Mobile bottom nav */}

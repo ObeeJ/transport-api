@@ -123,6 +123,8 @@ func httpErr(err error) (status int, code string) {
 		// steward OTP
 		{service.ErrOTPInvalid, 400, "otp_invalid"},
 		{service.ErrNotSteward, 403, "not_steward"},
+		// privacy
+		{service.ErrPrivacyRequired, 400, "privacy_required"},
 		// ratings
 		{service.ErrAlreadyRated, 409, "already_rated"},
 		{service.ErrInvalidScore, 400, "invalid_score"},
