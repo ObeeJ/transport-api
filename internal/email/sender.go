@@ -37,9 +37,13 @@ func (s *Sender) Configured() bool {
 }
 
 // SendVerification sends a click-to-verify link. The token is embedded in
-// the URL — the user never sees or types it.
-func (s *Sender) SendVerification(ctx context.Context, toEmail, token, appBaseURL string) error {
-	verifyURL := fmt.Sprintf("%s/account/verify-email?token=%s", appBaseURL, token)
+// the URL — the user never sees or types it. The link points at the API
+// (not the app) because the backend handler validates the token, marks the
+// user verified, then redirects to the frontend's success page. Pointing at
+// the frontend instead would require the frontend to re-POST the token,
+// which fails when the email is opened in a browser without a session.
+func (s *Sender) SendVerification(ctx context.Context, toEmail, token, apiBaseURL string) error {
+	verifyURL := fmt.Sprintf("%s/auth/email/verify/confirm?token=%s", apiBaseURL, token)
 	html := verifyHTML(toEmail, verifyURL)
 	return s.send(ctx, toEmail, "Verify your Akin email", html)
 }

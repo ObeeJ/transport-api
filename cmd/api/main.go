@@ -108,7 +108,7 @@ func main() {
 	notifySvc := service.NewNotificationService(notifyRepo)
 	walletSvc := service.NewWalletService(walletRepo, notifySvc, gdb)
 	authSvc := service.NewAuthService(userRepo, sessionRepo, cfg, mailer, gdb)
-	emailVerifySvc := service.NewEmailVerifyService(userRepo, notifySvc, mailer, cfg.AppBaseURL, gdb)
+	emailVerifySvc := service.NewEmailVerifyService(userRepo, notifySvc, mailer, cfg.APIBaseURL, gdb)
 	depositSvc := service.NewDepositService(depositRepo, recipientRepo, paymentProvider, cfg, notifySvc, gdb)
 	poolSvc := service.NewPoolService(depositRepo)
 	recipientSvc := service.NewRecipientService(recipientRepo, userRepo, paymentProvider, gdb)

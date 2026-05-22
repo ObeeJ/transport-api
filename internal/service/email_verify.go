@@ -24,7 +24,7 @@ type EmailVerifyService struct {
 	users      *repository.UserRepo
 	notify     *NotificationService
 	mailer     *email.Sender
-	appBaseURL string
+	apiBaseURL string
 	db         *gorm.DB
 }
 
@@ -32,14 +32,14 @@ func NewEmailVerifyService(
 	users *repository.UserRepo,
 	notify *NotificationService,
 	mailer *email.Sender,
-	appBaseURL string,
+	apiBaseURL string,
 	db *gorm.DB,
 ) *EmailVerifyService {
 	return &EmailVerifyService{
 		users:      users,
 		notify:     notify,
 		mailer:     mailer,
-		appBaseURL: appBaseURL,
+		apiBaseURL: apiBaseURL,
 		db:         db,
 	}
 }
@@ -66,7 +66,7 @@ func (s *EmailVerifyService) IssueToken(ctx context.Context, userID uuid.UUID) (
 
 	if s.mailer != nil && s.mailer.Configured() {
 		// Real email with a click-to-verify link.
-		if err := s.mailer.SendVerification(ctx, user.Email, token, s.appBaseURL); err != nil {
+		if err := s.mailer.SendVerification(ctx, user.Email, token, s.apiBaseURL); err != nil {
 			return "", err
 		}
 	} else {
