@@ -54,6 +54,18 @@ func (h *DriverHandler) Me(c *fiber.Ctx) error {
 	return c.JSON(d)
 }
 
+func (h *DriverHandler) Opportunities(c *fiber.Ctx) error {
+	user := middleware.CurrentUser(c)
+	if user == nil {
+		return c.Status(401).JSON(fiber.Map{"error": "not_authenticated"})
+	}
+	out, err := h.svc.Opportunities()
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "opportunities_failed"})
+	}
+	return c.JSON(out)
+}
+
 func (h *DriverHandler) Queue(c *fiber.Ctx) error {
 	items, err := h.svc.ListPending()
 	if err != nil {

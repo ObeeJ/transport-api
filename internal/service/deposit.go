@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/obeej/akin/internal/audit"
@@ -115,6 +116,69 @@ func (s *DepositService) Poll(ctx context.Context, reference string, userID uuid
 		}
 	}
 	return deposit, nil
+}
+
+// Activity returns a weeks×7 matrix of donation intensity (0-4) for the user's
+// last `weeks` weeks of successful deposits. Buckets are aligned to days,
+// oldest week first, Sunday-first. Intensity is normalised against the busiest
+// cell so the heatmap reads relatively even for low-activity users.
+func (s *DepositService) Activity(ctx context.Context, userID uuid.UUID, weeks int) ([][]int, error) {
+	if weeks <= 0 {
+		weeks = 4
+	}
+	days := weeks * 7
+	// Start at the Sunday `days-1` days before today so the top-left cell is
+	// always the oldest Sunday in the window.
+	now := time.Now().UTC()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	oldest := today.AddDate(0, 0, -(days - 1))
+	// Roll back to the prior Sunday so columns line up consistently.
+	oldest = oldest.AddDate(0, 0, -int(oldest.Weekday()))
+
+	var rows []struct {
+		Day time.Time
+		Cnt int
+	}
+	if err := s.db.WithContext(ctx).
+		Raw(`SELECT date_trunc('day', created_at) AS day, COUNT(*) AS cnt
+		     FROM giver_deposits
+		     WHERE user_id = ? AND status = 'succeeded' AND created_at >= ?
+		     GROUP BY 1`, userID, oldest).
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	matrix := make([][]int, weeks)
+	for i := range matrix {
+		matrix[i] = make([]int, 7)
+	}
+	counts := make([][]int, weeks)
+	for i := range counts {
+		counts[i] = make([]int, 7)
+	}
+	max := 0
+	for _, r := range rows {
+		d := time.Date(r.Day.Year(), r.Day.Month(), r.Day.Day(), 0, 0, 0, 0, time.UTC)
+		offset := int(d.Sub(oldest).Hours() / 24)
+		if offset < 0 || offset >= days {
+			continue
+		}
+		w, dy := offset/7, offset%7
+		counts[w][dy] = r.Cnt
+		if r.Cnt > max {
+			max = r.Cnt
+		}
+	}
+	if max == 0 {
+		return matrix, nil
+	}
+	for w := 0; w < weeks; w++ {
+		for d := 0; d < 7; d++ {
+			// Map counts to 0..4 intensity buckets relative to the busiest day.
+			matrix[w][d] = (counts[w][d]*4 + max/2) / max
+		}
+	}
+	return matrix, nil
 }
 
 // Settle is called by the webhook handler — idempotent.

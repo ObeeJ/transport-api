@@ -23,6 +23,11 @@ type User struct {
 	EmailVerifyToken       string     `gorm:"index" json:"-"`
 	PasswordResetToken     string     `gorm:"index" json:"-"`
 	PasswordResetExpiresAt *time.Time `json:"-"`
+	// OTP for the steward-only passwordless sign-in. Stored as a SHA-256
+	// hash so a DB leak doesn't yield usable codes; cleared on successful
+	// verify. Expiry is short (10 min) and gated by role at the handler.
+	OTPCodeHash            string     `json:"-"`
+	OTPExpiresAt           *time.Time `json:"-"`
 	CreatedAt              time.Time  `json:"createdAt"`
 	UpdatedAt              time.Time  `json:"updatedAt"`
 }

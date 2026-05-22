@@ -3,9 +3,13 @@ package service
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
+	"math/big"
 	"strings"
 	"time"
 
@@ -26,6 +30,8 @@ var (
 	ErrPasswordTooShort  = errors.New("password_too_short")
 	ErrEmailInvalid      = errors.New("email_invalid")
 	ErrResetTokenInvalid = errors.New("reset_token_invalid")
+	ErrOTPInvalid        = errors.New("otp_invalid")
+	ErrNotSteward        = errors.New("not_steward")
 )
 
 type AuthService struct {
@@ -178,6 +184,82 @@ func (s *AuthService) ConfirmPasswordReset(token, newPassword string) error {
 
 	audit.Record(s.db, user.ID.String(), "password_reset_confirmed", user.ID.String(), nil)
 	return nil
+}
+
+// RequestStewardOTP generates a 6-digit code, stores its hash, and emails the
+// plain code. Silent on unknown email or non-steward user to avoid leaking
+// who is/isn't elevated. Codes expire in 10 minutes.
+func (s *AuthService) RequestStewardOTP(ctx context.Context, emailAddr string) error {
+	emailAddr = strings.ToLower(strings.TrimSpace(emailAddr))
+	user, err := s.users.FindByEmail(emailAddr)
+	if err != nil {
+		return nil // silent
+	}
+	if !user.IsSteward() {
+		return nil // silent — don't reveal role
+	}
+
+	code, err := newOTPCode()
+	if err != nil {
+		return err
+	}
+	hash := hashOTP(code)
+	expiresAt := time.Now().Add(10 * time.Minute)
+
+	if err := s.users.SetOTP(user.ID, hash, expiresAt); err != nil {
+		return err
+	}
+
+	if s.mailer != nil && s.mailer.Configured() {
+		_ = s.mailer.SendStewardOTP(ctx, user.Email, code)
+	}
+
+	audit.Record(s.db, user.ID.String(), "steward_otp_requested", user.ID.String(), nil)
+	return nil
+}
+
+// VerifyStewardOTP checks the code in constant time, issues a session if it
+// matches and is unexpired, and clears the code so it can't be replayed.
+func (s *AuthService) VerifyStewardOTP(ctx context.Context, emailAddr, code string) (*SessionToken, error) {
+	emailAddr = strings.ToLower(strings.TrimSpace(emailAddr))
+	code = strings.TrimSpace(code)
+	user, err := s.users.FindByEmail(emailAddr)
+	if err != nil {
+		return nil, ErrOTPInvalid
+	}
+	if !user.IsSteward() {
+		return nil, ErrNotSteward
+	}
+	if user.OTPCodeHash == "" || user.OTPExpiresAt == nil || time.Now().After(*user.OTPExpiresAt) {
+		return nil, ErrOTPInvalid
+	}
+	expected, got := []byte(user.OTPCodeHash), []byte(hashOTP(code))
+	if subtle.ConstantTimeCompare(expected, got) != 1 {
+		return nil, ErrOTPInvalid
+	}
+	_ = s.users.ClearOTP(user.ID)
+
+	st, err := s.issueSession(user)
+	if err != nil {
+		return nil, err
+	}
+	audit.Record(s.db, user.ID.String(), "steward_otp_verified", user.ID.String(), nil)
+	return st, nil
+}
+
+// newOTPCode returns a 6-digit numeric code (zero-padded). Uses crypto/rand
+// so each code is unpredictable.
+func newOTPCode() (string, error) {
+	n, err := rand.Int(rand.Reader, big.NewInt(1_000_000))
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%06d", n.Int64()), nil
+}
+
+func hashOTP(code string) string {
+	sum := sha256.Sum256([]byte(code))
+	return hex.EncodeToString(sum[:])
 }
 
 func (s *AuthService) issueSession(user *models.User) (*SessionToken, error) {

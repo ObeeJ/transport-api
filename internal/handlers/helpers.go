@@ -120,6 +120,9 @@ func httpErr(err error) (status int, code string) {
 		{service.ErrAlreadyVerified, 409, "already_verified"},
 		// password reset
 		{service.ErrResetTokenInvalid, 400, "reset_token_invalid"},
+		// steward OTP
+		{service.ErrOTPInvalid, 400, "otp_invalid"},
+		{service.ErrNotSteward, 403, "not_steward"},
 		// ratings
 		{service.ErrAlreadyRated, 409, "already_rated"},
 		{service.ErrInvalidScore, 400, "invalid_score"},

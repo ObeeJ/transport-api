@@ -29,14 +29,15 @@ function defaultDepartureLocal(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-// Simulated dynamic Driver Opportunity / Seat Shortage Map data
-const opportunityHours = ['07:30', '09:00', '11:00', '13:00', '15:00', '17:00']
-const opportunityHubs = ['Main Gate', 'Sub Gate', 'Tech Hub', 'Health Science']
-const shortageMatrix = [
-  [3, 4, 2, 1, 3, 4], // Main Gate opportunity levels (high shortage at peak commuting hours)
-  [1, 2, 4, 2, 1, 3], // Sub Gate
-  [4, 3, 1, 2, 4, 2], // Tech Hub
-  [2, 1, 3, 4, 2, 1], // Health Science
+// Fallback axes used while /driver/opportunities is loading and when the
+// query returns no data yet. The API returns the same shape.
+const fallbackHours = ['07:30', '09:00', '11:00', '13:00', '15:00', '17:00']
+const fallbackHubs = ['Main Gate', 'Sub Gate', 'Tech Hub', 'Health Science']
+const fallbackMatrix: number[][] = [
+  [0, 0, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0, 0],
 ]
 
 export function DriverHome() {
@@ -71,6 +72,16 @@ export function DriverHome() {
   })
   const isApproved = driverProfile.data?.status === 'approved'
   const hasPending = driverProfile.data?.status === 'pending'
+
+  const opportunity = useQuery<{ hubs: string[]; hours: string[]; matrix: number[][] }>({
+    queryKey: ['driver', 'opportunities'],
+    queryFn: () => api.get('/driver/opportunities'),
+    enabled: !!user,
+    staleTime: 60 * 1000,
+  })
+  const opportunityHubs = opportunity.data?.hubs ?? fallbackHubs
+  const opportunityHours = opportunity.data?.hours ?? fallbackHours
+  const shortageMatrix = opportunity.data?.matrix ?? fallbackMatrix
 
   return (
     <motion.div

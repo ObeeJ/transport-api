@@ -38,6 +38,18 @@ func (h *GiverHandler) InitializeDeposit(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"authorizationUrl": result.AuthorizationURL, "reference": result.Reference})
 }
 
+func (h *GiverHandler) Activity(c *fiber.Ctx) error {
+	user := middleware.CurrentUser(c)
+	if user == nil {
+		return c.Status(401).JSON(fiber.Map{"error": "not_authenticated"})
+	}
+	matrix, err := h.svc.Activity(c.Context(), user.ID, 4)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "activity_failed"})
+	}
+	return c.JSON(fiber.Map{"weeks": matrix})
+}
+
 func (h *GiverHandler) GetDeposit(c *fiber.Ctx) error {
 	user := middleware.CurrentUser(c)
 	if user == nil {
