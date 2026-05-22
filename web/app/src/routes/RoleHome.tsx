@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { useNavigate } from 'react-router'
 import { motion } from 'motion/react'
 import { useAuth } from '@/lib/auth'
-import { useRoles, roleRoutes } from '@/lib/useRoles'
+import { useRoles, roleRoutes, setActiveRole } from '@/lib/useRoles'
 import { fadeUp, fadeIn, stagger, transition } from '@/lib/motion'
 
 const roleConfig = {
@@ -87,19 +87,34 @@ export function RoleHome() {
   const roles = useRoles()
 
   useEffect(() => {
-    // Wait for auth to finish loading before redirecting
     if (status !== 'authenticated') return
-    if (!roles.includes('driver') && !roles.includes('steward')) {
-      navigate('/give', { replace: true })
+    // Only auto-redirect if user has been here before (has activeRole set)
+    // New users should always see the role picker
+    const hasActiveRole = sessionStorage.getItem('akin.activeRole')
+    if (!hasActiveRole && !roles.includes('driver') && !roles.includes('steward')) {
+      // First time — show role picker, don't redirect
+      return
     }
+    if (roles.includes('driver') || roles.includes('steward')) return
+    navigate('/give', { replace: true })
   }, [roles, navigate, status])
 
-  // Show nothing while auth is loading or redirect is pending
-  if (status === 'loading' || (!roles.includes('driver') && !roles.includes('steward'))) {
+  if (status === 'loading') return null
+
+  // Show role picker for all users — auto-redirect only for returning users
+  // who have no elevated roles
+  const hasActiveRole = sessionStorage.getItem('akin.activeRole')
+  if (hasActiveRole && !roles.includes('driver') && !roles.includes('steward')) {
     return null
   }
 
-  const firstName = user?.email?.split('@')[0] ?? ''
+  const firstName = user?.firstName ?? user?.email?.split('@')[0] ?? ''
+
+  // New users see all 4 roles to pick from. Returning users with elevated
+  // roles see only their unlocked roles.
+  const displayRoles = roles.includes('driver') || roles.includes('steward')
+    ? roles
+    : (['giver', 'commuter', 'driver'] as const)
 
   return (
     <div
@@ -145,7 +160,7 @@ export function RoleHome() {
 
         {/* Role cards */}
         <motion.div variants={stagger(0.08, 0.15)} initial="hidden" animate="show" className="mt-8 space-y-4">
-          {roles.map((role) => {
+          {displayRoles.map((role) => {
             const cfg = roleConfig[role]
             return (
               <motion.button
@@ -154,7 +169,14 @@ export function RoleHome() {
                 transition={{ type: 'spring', stiffness: 300, damping: 25 }}
                 whileHover={{ scale: 1.025, y: -2 }}
                 whileTap={{ scale: 0.975 }}
-                onClick={() => navigate(role === 'steward' ? '/steward' : roleRoutes[role])}
+                onClick={() => {
+                  setActiveRole(role)
+                  if (role === 'driver' && !roles.includes('driver')) {
+                    navigate('/drive/apply')
+                  } else {
+                    navigate(role === 'steward' ? '/steward' : roleRoutes[role])
+                  }
+                }}
                 className={`w-full text-left rounded-[18px] p-5 border border-[var(--color-hairline)] transition-all ${cfg.glowClass} hover:border-[var(--color-stone-soft)] cursor-pointer`}
                 style={{ background: cfg.bg }}
               >
@@ -173,7 +195,11 @@ export function RoleHome() {
                         <span className="text-[17px] font-bold tracking-tight block" style={{ color: cfg.color }}>
                           {cfg.label}
                         </span>
-                        <p className="mt-1 text-[12px] leading-snug text-[var(--color-stone)] pr-2">{cfg.sub}</p>
+                        <p className="mt-1 text-[12px] leading-snug text-[var(--color-stone)] pr-2">
+                          {role === 'driver' && !roles.includes('driver')
+                            ? 'Apply to donate a seat. Publish trips.'
+                            : cfg.sub}
+                        </p>
                       </div>
                     </div>
                   </div>
