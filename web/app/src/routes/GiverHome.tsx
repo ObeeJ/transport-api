@@ -24,12 +24,13 @@ function formatNaira(kobo: number): string {
   return '₦' + Math.round(kobo / 100).toLocaleString('en-NG')
 }
 
-// Simulated donation activity matrix (4 weeks x 7 days)
-const donationMatrix = [
-  [1, 2, 0, 4, 2, 1, 3],
-  [2, 0, 1, 3, 4, 2, 1],
-  [0, 3, 2, 1, 2, 4, 2],
-  [1, 4, 3, 2, 1, 0, 3],
+// Empty 4×7 fallback for when the activity query is still loading or the
+// user has no deposits yet. Same shape the API returns.
+const emptyMatrix: number[][] = [
+  [0, 0, 0, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0, 0, 0],
 ]
 
 export function GiverHome() {
@@ -54,6 +55,14 @@ export function GiverHome() {
     queryKey: ['pool', 'this-week'],
     queryFn: () => api.get<PoolThisWeek>('/pool/this-week'),
   })
+
+  const activity = useQuery<{ weeks: number[][] }>({
+    queryKey: ['giver', 'activity'],
+    queryFn: () => api.get<{ weeks: number[][] }>('/giver/activity'),
+    enabled: !!user,
+    staleTime: 60 * 1000,
+  })
+  const donationMatrix = activity.data?.weeks ?? emptyMatrix
 
   async function onContinue() {
     setError(null)

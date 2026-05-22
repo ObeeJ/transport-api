@@ -200,6 +200,8 @@ func main() {
 	app.Post("/auth/login", authLimit, authH.Login)
 	app.Post("/auth/password/reset/request", authLimit, authH.RequestPasswordReset)
 	app.Post("/auth/password/reset/confirm", authLimit, authH.ConfirmPasswordReset)
+	app.Post("/auth/steward/otp/request", authLimit, authH.RequestStewardOTP)
+	app.Post("/auth/steward/otp/verify", authLimit, authH.VerifyStewardOTP)
 	app.Post("/auth/logout", authed, authH.Logout)
 	app.Get("/auth/me", authed, authH.Me)
 	app.Post("/auth/password/reset-request", authLimit, authH.RequestPasswordReset)
@@ -216,6 +218,7 @@ func main() {
 	// Giver — payment initiation is rate-limited and CSRF-protected
 	app.Post("/giver/deposits/initialize", authed, paymentLimit, giverH.InitializeDeposit)
 	app.Get("/giver/deposits/:reference", authed, giverH.GetDeposit)
+	app.Get("/giver/activity", authed, giverH.Activity)
 
 	// Encouragement notes
 	app.Post("/notes", authed, noteH.Submit)
@@ -248,6 +251,7 @@ func main() {
 	// Driver
 	app.Post("/driver/apply", authed, driverH.Apply)
 	app.Get("/driver/me", authed, driverH.Me)
+	app.Get("/driver/opportunities", authed, driverH.Opportunities)
 	app.Get("/driver/impact", authed, ratingH.MyImpact)
 	app.Get("/driver/average", authed, ratingH.MyAverage)
 
@@ -289,6 +293,7 @@ func main() {
 	}
 	steward := app.Group("/steward", authed, middleware.RequireSteward())
 	steward.Get("/queue", stewardH.Queue)
+	steward.Get("/workload", stewardH.Workload)
 	steward.Get("/applications/:id", stewardH.Application)
 	steward.Post("/applications/:id/decisions", stewardH.Decide)
 	steward.Get("/audit", stewardH.Audit)

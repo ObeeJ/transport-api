@@ -100,3 +100,31 @@ func (h *AuthHandler) ConfirmPasswordReset(c *fiber.Ctx) error {
 	}
 	return c.JSON(fiber.Map{"ok": true})
 }
+
+func (h *AuthHandler) RequestStewardOTP(c *fiber.Ctx) error {
+	var req struct {
+		Email string `json:"email"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "invalid_body"})
+	}
+	_ = h.svc.RequestStewardOTP(c.Context(), req.Email)
+	// Always 200 — don't reveal whether the email exists or is a steward.
+	return c.JSON(fiber.Map{"ok": true})
+}
+
+func (h *AuthHandler) VerifyStewardOTP(c *fiber.Ctx) error {
+	var req struct {
+		Email string `json:"email"`
+		Code  string `json:"code"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "invalid_body"})
+	}
+	st, err := h.svc.VerifyStewardOTP(c.Context(), req.Email, req.Code)
+	if err != nil {
+		return fail(c, err, "otp_failed")
+	}
+	setSessionCookie(c, h.cfg, st.Token, st.Session.ExpiresAt)
+	return c.JSON(toUserResponse(st.User))
+}

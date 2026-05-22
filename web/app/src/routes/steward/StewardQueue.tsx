@@ -16,14 +16,15 @@ type Recipient = {
   createdAt: string
 }
 
-// Simulated active queue backlog load for the operational density map
-const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-const queueNames = ['Commuter intake', 'Driver onboard', 'SOS alerts', 'Payout auths']
-const workloadMatrix = [
-  [3, 4, 1, 2, 4, 3], // Commuter intake volume
-  [2, 3, 4, 1, 2, 2], // Driver onboarding queues
-  [1, 0, 2, 4, 1, 0], // SOS urgent alerts
-  [4, 2, 3, 1, 3, 4], // Payout audit backlogs
+// Fallback axes used while /steward/workload is loading. The API returns
+// the same shape: queue labels × day labels × intensity matrix.
+const fallbackDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const fallbackQueueNames = ['Commuter intake', 'Driver onboard', 'SOS alerts', 'Payout auths']
+const fallbackWorkloadMatrix: number[][] = [
+  [0, 0, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0, 0],
 ]
 
 export function StewardQueue() {
@@ -37,6 +38,16 @@ export function StewardQueue() {
     queryFn: () => api.get('/steward/queue'),
     refetchInterval: 10_000,
   })
+
+  const workload = useQuery<{ queues: string[]; days: string[]; matrix: number[][] }>({
+    queryKey: ['steward', 'workload'],
+    queryFn: () => api.get('/steward/workload'),
+    enabled: !!user,
+    staleTime: 60 * 1000,
+  })
+  const queueNames = workload.data?.queues ?? fallbackQueueNames
+  const days = workload.data?.days ?? fallbackDays
+  const workloadMatrix = workload.data?.matrix ?? fallbackWorkloadMatrix
 
   return (
     <motion.div

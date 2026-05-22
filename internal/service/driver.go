@@ -23,6 +23,157 @@ var (
 var validVehicleTypes = map[string]bool{"car": true, "bus": true, "minivan": true}
 var validAttendanceStatuses = map[string]bool{"boarded": true, "no_show": true}
 
+// hourBuckets defines the 6 time-of-day buckets surfaced on the driver
+// opportunity heatmap. Each entry is [startHour, endHourExclusive] in 24h
+// local time and a display label used by the frontend axis.
+var hourBuckets = []struct {
+	Start int
+	End   int
+	Label string
+}{
+	{7, 8, "07:30"},
+	{8, 10, "09:00"},
+	{10, 12, "11:00"},
+	{12, 14, "13:00"},
+	{14, 16, "15:00"},
+	{16, 19, "17:00"},
+}
+
+// HubOpportunity returns a hubs × hours intensity matrix derived from real
+// booking demand over the trailing 14 days. Each cell is 0-4, normalised
+// against the busiest cell so the heatmap is readable even for low-volume
+// periods. Only the top 4 hubs by total demand are returned (matching the
+// frontend's compact axis); ties broken by hub name.
+type HubOpportunity struct {
+	Hubs   []string `json:"hubs"`
+	Hours  []string `json:"hours"`
+	Matrix [][]int  `json:"matrix"`
+}
+
+func (s *DriverService) Opportunities() (*HubOpportunity, error) {
+	type row struct {
+		HubName string
+		Hour    int
+		Cnt     int
+	}
+	var rows []row
+	if err := s.db.Raw(`
+		SELECT h.name AS hub_name, EXTRACT(HOUR FROM t.departure_at)::int AS hour, COUNT(*) AS cnt
+		FROM bookings b
+		JOIN trips t ON t.id = b.trip_id
+		JOIN hubs  h ON h.id = t.origin_hub_id
+		WHERE b.status = 'booked'
+		  AND t.departure_at >= NOW() - INTERVAL '14 days'
+		GROUP BY 1, 2
+	`).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	// Aggregate by hub, then bucket hours.
+	hubTotals := map[string]int{}
+	hubMatrix := map[string][]int{}
+	for _, r := range rows {
+		if _, ok := hubMatrix[r.HubName]; !ok {
+			hubMatrix[r.HubName] = make([]int, len(hourBuckets))
+		}
+		hubTotals[r.HubName] += r.Cnt
+		for i, b := range hourBuckets {
+			if r.Hour >= b.Start && r.Hour < b.End {
+				hubMatrix[r.HubName][i] += r.Cnt
+				break
+			}
+		}
+	}
+
+	// Pick top-4 hubs by demand; pad with any-active hubs alphabetically when
+	// there's no booking volume yet so the widget still renders something.
+	hubs := topHubs(hubTotals, 4)
+	if len(hubs) < 4 {
+		hubs = padHubs(s.db, hubs, 4)
+	}
+
+	max := 0
+	for _, h := range hubs {
+		for _, v := range hubMatrix[h] {
+			if v > max {
+				max = v
+			}
+		}
+	}
+
+	out := &HubOpportunity{
+		Hubs:   hubs,
+		Hours:  make([]string, len(hourBuckets)),
+		Matrix: make([][]int, len(hubs)),
+	}
+	for i, b := range hourBuckets {
+		out.Hours[i] = b.Label
+	}
+	for i, h := range hubs {
+		out.Matrix[i] = make([]int, len(hourBuckets))
+		if max == 0 {
+			continue
+		}
+		for j := range hourBuckets {
+			c := 0
+			if row, ok := hubMatrix[h]; ok {
+				c = row[j]
+			}
+			out.Matrix[i][j] = (c*4 + max/2) / max
+		}
+	}
+	return out, nil
+}
+
+func topHubs(totals map[string]int, n int) []string {
+	type kv struct {
+		k string
+		v int
+	}
+	pairs := make([]kv, 0, len(totals))
+	for k, v := range totals {
+		pairs = append(pairs, kv{k, v})
+	}
+	// Sort by count desc, name asc. Small N, O(N^2) is fine.
+	for i := 0; i < len(pairs); i++ {
+		for j := i + 1; j < len(pairs); j++ {
+			if pairs[j].v > pairs[i].v || (pairs[j].v == pairs[i].v && pairs[j].k < pairs[i].k) {
+				pairs[i], pairs[j] = pairs[j], pairs[i]
+			}
+		}
+	}
+	if len(pairs) > n {
+		pairs = pairs[:n]
+	}
+	out := make([]string, len(pairs))
+	for i, p := range pairs {
+		out[i] = p.k
+	}
+	return out
+}
+
+func padHubs(db *gorm.DB, have []string, n int) []string {
+	if len(have) >= n {
+		return have
+	}
+	seen := map[string]bool{}
+	for _, h := range have {
+		seen[h] = true
+	}
+	var extras []string
+	db.Raw(`SELECT name FROM hubs WHERE active = true ORDER BY name LIMIT ?`, n*2).Scan(&extras)
+	for _, e := range extras {
+		if len(have) >= n {
+			break
+		}
+		if !seen[e] {
+			have = append(have, e)
+			seen[e] = true
+		}
+	}
+	return have
+}
+
 type DriverService struct {
 	repo      *repository.DriverRepo
 	stewards  *repository.StewardRepo

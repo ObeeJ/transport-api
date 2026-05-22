@@ -54,6 +54,13 @@ func (s *Sender) SendPasswordReset(ctx context.Context, toEmail, token, appBaseU
 	return s.send(ctx, toEmail, "Reset your Akin password", html)
 }
 
+// SendStewardOTP delivers a 6-digit sign-in code to a steward. The code is
+// the credential — no URL — so the recipient types it back into the app.
+func (s *Sender) SendStewardOTP(ctx context.Context, toEmail, code string) error {
+	html := stewardOTPHTML(toEmail, code)
+	return s.send(ctx, toEmail, "Your Akin steward sign-in code", html)
+}
+
 func (s *Sender) send(ctx context.Context, to, subject, html string) error {
 	if !s.Configured() {
 		slog.Warn("email not configured — skipping send", "to", to, "subject", subject)
@@ -223,6 +230,59 @@ func verifyHTML(toEmail, verifyURL string) string {
   </table>
 </body>
 </html>`, toEmail, verifyURL, verifyURL, verifyURL)
+}
+
+func stewardOTPHTML(toEmail, code string) string {
+	return fmt.Sprintf(`<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Steward sign-in code</title></head>
+<body style="margin:0;padding:0;background:#F5EFE6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <table width="100%%" cellpadding="0" cellspacing="0" style="background:#F5EFE6;padding:40px 20px;">
+    <tr><td align="center">
+      <table width="100%%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#FBF8F2;border-radius:18px;border:1px solid #E2DBCB;overflow:hidden;">
+        <tr>
+          <td style="padding:32px 40px 0;">
+            <table cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="font-size:24px;font-weight:600;color:#1B2A4E;letter-spacing:-0.03em;">akin</td>
+                <td style="font-size:24px;font-weight:600;color:#D97757;letter-spacing:-0.03em;padding-left:1px;">.</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:28px 40px 0;">
+            <h1 style="margin:0;font-size:26px;font-weight:500;color:#1B2A4E;letter-spacing:-0.02em;line-height:1.15;">Steward sign-in code.</h1>
+            <p style="margin:14px 0 0;font-size:14px;color:#8B8680;line-height:1.65;">
+              Use the code below to finish signing in as <strong style="color:#1A1A1A;font-weight:500;">%s</strong>.
+              It expires in 10 minutes.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:28px 40px 0;">
+            <div style="background:#1B2A4E;border-radius:14px;padding:22px 28px;text-align:center;">
+              <div style="font-family:'SF Mono',Menlo,Consolas,monospace;font-size:32px;letter-spacing:0.4em;color:#FBF8F2;font-weight:500;">%s</div>
+            </div>
+            <p style="margin:16px 0 0;font-size:11px;color:#C9C3B8;line-height:1.6;">
+              If you didn't request this, ignore the email — your account stays secure.
+              Never share this code with anyone, including Akin staff.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:32px 40px;">
+            <hr style="border:none;border-top:1px solid #E2DBCB;margin:0 0 20px;">
+            <p style="margin:0;font-size:11px;color:#C9C3B8;line-height:1.6;">
+              You're receiving this because the email %s is registered as a steward on Akin.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`, toEmail, code, toEmail)
 }
 
 func resetHTML(toEmail, resetURL string) string {

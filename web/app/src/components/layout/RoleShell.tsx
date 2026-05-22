@@ -374,7 +374,7 @@ export function RoleShell({ role }: { role: Role }) {
       )}
 
       {/* ── Main ── */}
-      <div className={cn('flex-1 flex flex-col min-w-0', isMobile && 'max-w-[420px] mx-auto w-full')}>
+      <div className={cn('flex-1 flex flex-col min-w-0', isMobile && 'w-full overflow-x-hidden')}>
 
         {/* Mobile header */}
         {isMobile && (
@@ -471,8 +471,19 @@ export function RoleShell({ role }: { role: Role }) {
 
         {/* Mobile bottom nav */}
         {isMobile && (
-          <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[420px] bg-[var(--color-paper)]/96 backdrop-blur-md border-t border-[var(--color-hairline)] z-50">
-            <div className={cn('grid', `grid-cols-${allNav.length}`)}>
+          <nav className="fixed bottom-0 inset-x-0 bg-[var(--color-paper)]/96 backdrop-blur-md border-t border-[var(--color-hairline)] z-50">
+            {/*
+              Inline grid-template-columns is intentional: Tailwind's
+              `grid-cols-N` utilities are generated at build time from
+              static class names. A template literal like
+              `grid-cols-${allNav.length}` never makes it into the CSS
+              bundle, so the class doesn't exist at runtime and the layout
+              silently breaks. Using inline style sidesteps the purge.
+            */}
+            <div
+              className="grid"
+              style={{ gridTemplateColumns: `repeat(${allNav.length}, minmax(0, 1fr))` }}
+            >
               {allNav.map((item) => (
                 <NavLink
                   key={item.to}

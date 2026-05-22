@@ -29,6 +29,14 @@ func (h *StewardHandler) Queue(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"items": out})
 }
 
+func (h *StewardHandler) Workload(c *fiber.Ctx) error {
+	out, err := h.svc.Workload()
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "workload_failed"})
+	}
+	return c.JSON(out)
+}
+
 func (h *StewardHandler) Application(c *fiber.Ctx) error {
 	steward := middleware.CurrentUser(c)
 	id, err := uuid.Parse(c.Params("id"))

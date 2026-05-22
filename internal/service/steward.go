@@ -35,6 +35,76 @@ func (s *StewardService) Queue() ([]models.Recipient, error) {
 	return s.recipients.ListPending()
 }
 
+// Workload returns a 4 × 6 intensity matrix (0-4) of pending items across the
+// four steward queues, distributed by the day-of-week each item was created.
+// Surfaces "when work piles up" — Mondays heavy on driver intake, etc.
+// Saturday/Friday peaks tell stewards when to rally; flat rows mean a calm
+// queue. Items created on Sunday are folded into the Monday column to keep
+// the 6-day grid clean.
+type StewardWorkload struct {
+	Queues []string `json:"queues"`
+	Days   []string `json:"days"`
+	Matrix [][]int  `json:"matrix"`
+}
+
+func (s *StewardService) Workload() (*StewardWorkload, error) {
+	queues := []struct {
+		Label string
+		SQL   string
+	}{
+		{"Commuter intake", `SELECT EXTRACT(DOW FROM created_at)::int AS dow, COUNT(*) AS cnt FROM recipients       WHERE status = 'pending'           GROUP BY 1`},
+		{"Driver onboard", `SELECT EXTRACT(DOW FROM created_at)::int AS dow, COUNT(*) AS cnt FROM driver_profiles  WHERE status = 'pending'           GROUP BY 1`},
+		{"SOS alerts",     `SELECT EXTRACT(DOW FROM created_at)::int AS dow, COUNT(*) AS cnt FROM sos_alerts       WHERE status = 'open'              GROUP BY 1`},
+		{"Payout auths",   `SELECT EXTRACT(DOW FROM created_at)::int AS dow, COUNT(*) AS cnt FROM payouts          WHERE status = 'awaiting_confirm'  GROUP BY 1`},
+	}
+
+	out := &StewardWorkload{
+		Queues: make([]string, len(queues)),
+		Days:   []string{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat"},
+		Matrix: make([][]int, len(queues)),
+	}
+	counts := make([][]int, len(queues))
+	for i := range counts {
+		counts[i] = make([]int, 6)
+		out.Queues[i] = queues[i].Label
+		out.Matrix[i] = make([]int, 6)
+	}
+	max := 0
+	for qi, q := range queues {
+		var rows []struct {
+			Dow int
+			Cnt int
+		}
+		if err := s.db.Raw(q.SQL).Scan(&rows).Error; err != nil {
+			return nil, err
+		}
+		for _, r := range rows {
+			// Map dow (0=Sun..6=Sat) → col idx (0=Mon..5=Sat). Fold Sunday
+			// into Monday so the grid stays full-width.
+			col := r.Dow - 1
+			if col < 0 {
+				col = 0
+			}
+			if col > 5 {
+				continue
+			}
+			counts[qi][col] += r.Cnt
+			if counts[qi][col] > max {
+				max = counts[qi][col]
+			}
+		}
+	}
+	if max == 0 {
+		return out, nil
+	}
+	for i := 0; i < len(queues); i++ {
+		for j := 0; j < 6; j++ {
+			out.Matrix[i][j] = (counts[i][j]*4 + max/2) / max
+		}
+	}
+	return out, nil
+}
+
 type ApplicationDetail struct {
 	Recipient    models.Recipient
 	Actions      []models.StewardAction

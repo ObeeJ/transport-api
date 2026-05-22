@@ -70,3 +70,17 @@ func (r *UserRepo) UpdatePassword(id uuid.UUID, hash string) error {
 		"password_reset_expires_at": nil,
 	}).Error
 }
+
+func (r *UserRepo) SetOTP(id uuid.UUID, codeHash string, expiresAt time.Time) error {
+	return r.db.Model(&models.User{}).Where("id = ?", id).Updates(map[string]any{
+		"otp_code_hash":  codeHash,
+		"otp_expires_at": expiresAt,
+	}).Error
+}
+
+func (r *UserRepo) ClearOTP(id uuid.UUID) error {
+	return r.db.Model(&models.User{}).Where("id = ?", id).Updates(map[string]any{
+		"otp_code_hash":  "",
+		"otp_expires_at": nil,
+	}).Error
+}
