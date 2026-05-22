@@ -2,15 +2,19 @@ package reconciler_test
 
 import (
 	"os"
+	"sync"
 	"testing"
 	"time"
 
+	akindb "github.com/obeej/akin/internal/db"
 	"github.com/obeej/akin/internal/models"
 	"github.com/obeej/akin/internal/reconciler"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
+
+var migrateOnce sync.Once
 
 func testDB(t *testing.T) *gorm.DB {
 	t.Helper()
@@ -24,6 +28,11 @@ func testDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Skipf("postgres unavailable: %v", err)
 	}
+	migrateOnce.Do(func() {
+		if err := akindb.AutoMigrate(db); err != nil {
+			t.Fatalf("auto-migrate: %v", err)
+		}
+	})
 	return db
 }
 
