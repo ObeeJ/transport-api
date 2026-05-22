@@ -18,21 +18,23 @@ func NewAuthHandler(svc *service.AuthService, cfg *config.Config) *AuthHandler {
 
 func (h *AuthHandler) Signup(c *fiber.Ctx) error {
 	var req struct {
-		Email     string `json:"email"`
-		FirstName string `json:"firstName"`
-		LastName  string `json:"lastName"`
-		Phone     string `json:"phone"`
-		Password  string `json:"password"`
+		Email            string `json:"email"`
+		FirstName        string `json:"firstName"`
+		LastName         string `json:"lastName"`
+		Phone            string `json:"phone"`
+		Password         string `json:"password"`
+		AcceptedPrivacy  bool   `json:"acceptedPrivacy"`
 	}
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": "invalid_body"})
 	}
 	st, err := h.svc.Signup(service.SignupInput{
-		Email:     req.Email,
-		FirstName: req.FirstName,
-		LastName:  req.LastName,
-		Phone:     req.Phone,
-		Password:  req.Password,
+		Email:           req.Email,
+		FirstName:       req.FirstName,
+		LastName:        req.LastName,
+		Phone:           req.Phone,
+		Password:        req.Password,
+		AcceptedPrivacy: req.AcceptedPrivacy,
 	})
 	if err != nil {
 		return fail(c, err, "signup_failed")

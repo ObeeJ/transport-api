@@ -32,7 +32,13 @@ var (
 	ErrResetTokenInvalid = errors.New("reset_token_invalid")
 	ErrOTPInvalid        = errors.New("otp_invalid")
 	ErrNotSteward        = errors.New("not_steward")
+	ErrPrivacyRequired   = errors.New("privacy_required")
 )
+
+// PrivacyVersion is the current Privacy Promise version. Bump this string
+// when the policy text changes materially — older accounts will still show
+// a stale version in their record, which lets us prompt re-acceptance.
+const PrivacyVersion = "2026-05-22"
 
 type AuthService struct {
 	users    *repository.UserRepo
@@ -47,11 +53,12 @@ func NewAuthService(users *repository.UserRepo, sessions *repository.SessionRepo
 }
 
 type SignupInput struct {
-	Email     string
-	FirstName string
-	LastName  string
-	Phone     string
-	Password  string
+	Email            string
+	FirstName        string
+	LastName         string
+	Phone            string
+	Password         string
+	AcceptedPrivacy  bool
 }
 
 type SessionToken struct {
@@ -70,6 +77,9 @@ func (s *AuthService) Signup(input SignupInput) (*SessionToken, error) {
 	if len(input.Password) < 8 {
 		return nil, ErrPasswordTooShort
 	}
+	if !input.AcceptedPrivacy {
+		return nil, ErrPrivacyRequired
+	}
 	phone, err := normalizePhone(input.Phone)
 	if err != nil {
 		return nil, ErrPhoneInvalid
@@ -84,12 +94,15 @@ func (s *AuthService) Signup(input SignupInput) (*SessionToken, error) {
 		return nil, err
 	}
 
+	now := time.Now()
 	user := &models.User{
-		Email:        input.Email,
-		FirstName:    input.FirstName,
-		LastName:     input.LastName,
-		PhoneE164:    phone,
-		PasswordHash: string(hash),
+		Email:             input.Email,
+		FirstName:         input.FirstName,
+		LastName:          input.LastName,
+		PhoneE164:         phone,
+		PasswordHash:      string(hash),
+		PrivacyAcceptedAt: &now,
+		PrivacyVersion:    PrivacyVersion,
 	}
 	if err := s.users.Create(user); err != nil {
 		return nil, err

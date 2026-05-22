@@ -17,7 +17,7 @@ type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated'
 type AuthContextValue = {
   user: User | null
   status: AuthStatus
-  signup: (input: { email: string; firstName: string; lastName: string; phone: string; password: string }) => Promise<User>
+  signup: (input: { email: string; firstName: string; lastName: string; phone: string; password: string; acceptedPrivacy: boolean }) => Promise<User>
   login: (input: { email: string; password: string }) => Promise<User>
   logout: () => Promise<void>
   refresh: () => Promise<void>

@@ -30,3 +30,7 @@ coverage/
 
 # Backups
 /backups/
+
+# DB dumps (may contain sensitive data)
+*.dump
+*.sql.gz

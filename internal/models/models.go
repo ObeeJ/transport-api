@@ -28,6 +28,11 @@ type User struct {
 	// verify. Expiry is short (10 min) and gated by role at the handler.
 	OTPCodeHash            string     `json:"-"`
 	OTPExpiresAt           *time.Time `json:"-"`
+	// Privacy Promise acceptance — captured at signup. Required to create an
+	// account; stored as a timestamp + the policy version that was in force.
+	// If the policy materially changes we bump the version and re-prompt.
+	PrivacyAcceptedAt      *time.Time `json:"privacyAcceptedAt,omitempty"`
+	PrivacyVersion         string     `gorm:"not null;default:''" json:"privacyVersion,omitempty"`
 	CreatedAt              time.Time  `json:"createdAt"`
 	UpdatedAt              time.Time  `json:"updatedAt"`
 }

@@ -49,6 +49,7 @@ import { StewardSOS } from '@/routes/steward/StewardSOS'
 import { StewardAppeals } from '@/routes/steward/StewardAppeals'
 import { StewardDrivers } from '@/routes/steward/StewardDrivers'
 import { StewardSignIn } from '@/routes/steward/StewardSignIn'
+import { PrivacyPromise } from '@/routes/PrivacyPromise'
 import { NotFound } from '@/routes/NotFound'
 
 export default function App() {
@@ -61,6 +62,8 @@ export default function App() {
       <Route path="/account/reset-password" element={<ResetConfirm />} />
       <Route path="/account/forgot-password" element={<ResetRequest />} />
       <Route path="/steward/sign-in" element={<StewardSignIn />} />
+      <Route path="/privacy" element={<PrivacyPromise />} />
+      <Route path="/privacy-promise" element={<PrivacyPromise />} />
 
       <Route element={<RequireAuth />}>
         {/* Role home — picks the right shell */}

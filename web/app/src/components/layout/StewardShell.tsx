@@ -269,6 +269,13 @@ export function StewardShell() {
           >
             <Outlet />
           </motion.div>
+
+          <footer className="mt-12 pt-6 border-t border-[var(--color-hairline)] flex items-center justify-between text-[10px] text-[var(--color-stone-soft)]">
+            <span>© akin</span>
+            <Link to="/privacy" className="hover:text-[var(--color-stone)] transition-colors">
+              Privacy promise
+            </Link>
+          </footer>
         </main>
       </div>
     </div>
