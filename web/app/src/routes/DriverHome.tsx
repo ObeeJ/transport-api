@@ -418,6 +418,7 @@ function PublishTripForm({ hubs, onCancel, onDone }: { hubs: Hub[]; onCancel: ()
           <input
             value={destination}
             onChange={(e) => setDestination(e.target.value)}
+            maxLength={120}
             className="mt-1 w-full bg-[var(--color-paper)] border border-[var(--color-hairline)] rounded-[12px] px-3 h-11 text-sm focus:outline-none focus:border-[var(--color-clay)] focus:ring-1 focus:ring-[var(--color-clay)] transition-all duration-200 shadow-sm"
             placeholder="Faculty of Engineering"
           />
@@ -437,7 +438,7 @@ function PublishTripForm({ hubs, onCancel, onDone }: { hubs: Hub[]; onCancel: ()
             <input
               type="number"
               min={1}
-              max={7}
+              max={8}
               value={totalSeats}
               onChange={(e) => setTotalSeats(parseInt(e.target.value || '0', 10))}
               className="mt-1 w-full bg-[var(--color-paper)] border border-[var(--color-hairline)] rounded-[12px] px-3 h-11 text-sm font-mono focus:outline-none focus:border-[var(--color-clay)] focus:ring-1 focus:ring-[var(--color-clay)] transition-all duration-200 shadow-sm"

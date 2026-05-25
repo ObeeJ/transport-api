@@ -114,6 +114,7 @@ export function RecipientApply() {
             <textarea
               required
               minLength={20}
+              maxLength={4000}
               value={situation}
               onChange={(e) => setSituation(e.target.value)}
               rows={4}

@@ -39,13 +39,13 @@ export function NotesFeed() {
         <textarea
           value={body}
           onChange={(e) => setBody(e.target.value)}
-          maxLength={280}
+          maxLength={600}
           rows={3}
           placeholder="Something kind. It'll reach them."
           className="w-full bg-transparent text-sm outline-none placeholder:text-[var(--color-stone-soft)] resize-none"
         />
         <div className="mt-2 flex items-center justify-between">
-          <span className="font-mono text-[10px] text-[var(--color-stone)]">{body.length}/280</span>
+          <span className="font-mono text-[10px] text-[var(--color-stone)]">{body.length}/600</span>
           <button
             onClick={() => submit.mutate()}
             disabled={submit.isPending || body.trim().length === 0}
