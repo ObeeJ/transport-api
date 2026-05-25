@@ -107,7 +107,10 @@ func (s *PayoutService) Preview() (*BatchPreview, error) {
 	}
 
 	weekStart := models.WeekStartOf(time.Now()).AddDate(0, 0, -7)
-	preview := &BatchPreview{WeekStart: weekStart.Format("2006-01-02")}
+	preview := &BatchPreview{
+		WeekStart: weekStart.Format("2006-01-02"),
+		Lines:     []BatchPreviewLine{},
+	}
 
 	for _, r := range recipients {
 		line := BatchPreviewLine{
