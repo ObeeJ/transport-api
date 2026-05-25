@@ -4,6 +4,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/obeej/akin/internal/middleware"
+	"github.com/obeej/akin/internal/sanitize"
 	"github.com/obeej/akin/internal/service"
 )
 
@@ -27,7 +28,11 @@ func (h *AppealHandler) Submit(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil || req.Reason == "" {
 		return c.Status(400).JSON(fiber.Map{"error": "invalid_body"})
 	}
-	appeal, err := h.svc.Submit(user.ID, req.Reason)
+	reason, err := sanitize.Text(req.Reason, sanitize.MaxReason)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "reason_invalid"})
+	}
+	appeal, err := h.svc.Submit(user.ID, reason)
 	if err != nil {
 		return fail(c, err, "submit_failed")
 	}

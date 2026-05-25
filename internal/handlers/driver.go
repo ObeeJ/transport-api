@@ -4,6 +4,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/obeej/akin/internal/middleware"
+	"github.com/obeej/akin/internal/sanitize"
 	"github.com/obeej/akin/internal/service"
 )
 
@@ -29,12 +30,28 @@ func (h *DriverHandler) Apply(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": "invalid_body"})
 	}
+	vehicleType, err := sanitize.Enum(req.VehicleType, "car", "bus", "minivan")
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "invalid_vehicle_type"})
+	}
+	vehiclePlate, err := sanitize.SingleLine(req.VehiclePlate, sanitize.MaxPlate)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "vehicle_plate_invalid"})
+	}
+	licenseNumber, err := sanitize.SingleLine(req.LicenseNumber, sanitize.MaxLicense)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "license_number_invalid"})
+	}
+	note, err := sanitize.Optional(req.Note, sanitize.MaxNote)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "note_invalid"})
+	}
 	d, err := h.svc.Apply(service.ApplyDriverInput{
 		UserID:        user.ID,
-		VehicleType:   req.VehicleType,
-		VehiclePlate:  req.VehiclePlate,
-		LicenseNumber: req.LicenseNumber,
-		Note:          req.Note,
+		VehicleType:   vehicleType,
+		VehiclePlate:  vehiclePlate,
+		LicenseNumber: licenseNumber,
+		Note:          note,
 	})
 	if err != nil {
 		return fail(c, err, "apply_failed")

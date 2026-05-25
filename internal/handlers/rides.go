@@ -4,6 +4,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/obeej/akin/internal/middleware"
+	"github.com/obeej/akin/internal/sanitize"
 	"github.com/obeej/akin/internal/service"
 )
 
@@ -47,11 +48,17 @@ func (h *RidesHandler) PublishTrip(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": "invalid_body"})
 	}
-
+	destination, err := sanitize.SingleLine(req.Destination, sanitize.MaxDestination)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "destination_invalid"})
+	}
+	if req.TotalSeats < 1 || req.TotalSeats > 8 {
+		return c.Status(400).JSON(fiber.Map{"error": "invalid_seats"})
+	}
 	trip, err := h.svc.PublishTrip(service.PublishTripInput{
 		DriverID:     user.ID,
 		OriginHubID:  req.OriginHubID,
-		Destination:  req.Destination,
+		Destination:  destination,
 		DepartureAt:  req.DepartureAt,
 		TotalSeats:   req.TotalSeats,
 		VehiclePlate: req.VehiclePlate,

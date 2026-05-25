@@ -4,6 +4,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/obeej/akin/internal/middleware"
+	"github.com/obeej/akin/internal/sanitize"
 	"github.com/obeej/akin/internal/service"
 )
 
@@ -31,13 +32,14 @@ func (h *SOSHandler) Trigger(c *fiber.Ctx) error {
 		Note string  `json:"note"`
 	}
 	_ = c.BodyParser(&req)
+	note, _ := sanitize.Optional(req.Note, sanitize.MaxReason)
 
 	alert, err := h.svc.Trigger(service.TriggerSOSInput{
 		TripID: tripID,
 		UserID: user.ID,
 		Lat:    req.Lat,
 		Lng:    req.Lng,
-		Note:   req.Note,
+		Note:   note,
 	})
 	if err != nil {
 		return fail(c, err, "sos_failed")

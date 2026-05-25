@@ -3,6 +3,7 @@ package handlers
 import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/obeej/akin/internal/middleware"
+	"github.com/obeej/akin/internal/sanitize"
 	"github.com/obeej/akin/internal/service"
 )
 
@@ -26,7 +27,11 @@ func (h *NoteHandler) Submit(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": "invalid_body"})
 	}
-	note, err := h.svc.Submit(user.ID, req.Body)
+	body, err := sanitize.Text(req.Body, sanitize.MaxNote)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "note_invalid"})
+	}
+	note, err := h.svc.Submit(user.ID, body)
 	if err != nil {
 		return fail(c, err, "submit_failed")
 	}
