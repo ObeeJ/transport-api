@@ -18,7 +18,7 @@ type BatchPreviewLine = {
 
 type BatchPreview = {
   weekStart: string
-  lines: BatchPreviewLine[]
+  lines: BatchPreviewLine[] | null
   totalKobo: number
   eligible: number
   skipped: number
@@ -173,7 +173,7 @@ export function StewardPayouts() {
                   <div className="w-16 h-3 rounded bg-[var(--color-cream-2)]" />
                 </div>
               ))
-            : p?.lines.length === 0
+            : (p?.lines ?? []).length === 0
               ? (
                 <div className="px-5 py-8 text-center">
                   <p className="text-[13px] font-medium text-[var(--color-indigo)]">No approved recipients yet</p>
@@ -182,7 +182,7 @@ export function StewardPayouts() {
                   </p>
                 </div>
               )
-              : p?.lines.map((line, i) => {
+              : (p?.lines ?? []).map((line, i) => {
                 const skip = line.skipReason ? SKIP_LABELS[line.skipReason] : null
                 return (
                   <motion.div
@@ -267,7 +267,7 @@ export function StewardPayouts() {
                 <>
                   {!p || preview.isLoading ? (
                     <p className="text-[11px] text-[var(--color-stone)] flex-1">Calculating eligible recipients…</p>
-                  ) : p.lines.length === 0 ? (
+                  ) : (p.lines ?? []).length === 0 ? (
                     <p className="text-[11px] text-[var(--color-stone)] flex-1">
                       No recipients to pay out yet. Approve applications on the{' '}
                       <Link to="/steward" className="underline underline-offset-2 text-[var(--color-indigo)]">Queue</Link>{' '}
