@@ -155,6 +155,11 @@ func main() {
 		AppName:      "akin-api",
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
+		// 256KB body cap. JSON payloads in this app are tiny — auth, ride
+		// publish, notes (~600 chars). 256KB is generous enough that no
+		// legit request ever hits it, but tight enough to reject DoS-style
+		// gigantic payloads before they touch a handler.
+		BodyLimit: 256 * 1024,
 	})
 
 	prod := cfg.AppEnv == "production"
