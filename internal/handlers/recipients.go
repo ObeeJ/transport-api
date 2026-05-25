@@ -3,6 +3,7 @@ package handlers
 import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/obeej/akin/internal/middleware"
+	"github.com/obeej/akin/internal/sanitize"
 	"github.com/obeej/akin/internal/service"
 )
 
@@ -30,10 +31,17 @@ func (h *RecipientHandler) Apply(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": "invalid_body"})
 	}
+	situation, err := sanitize.Text(req.Situation, sanitize.MaxLongText)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "situation_invalid"})
+	}
+	if req.WeeklyCostKobo <= 0 {
+		return c.Status(400).JSON(fiber.Map{"error": "weekly_cost_too_small"})
+	}
 	r, err := h.svc.Apply(service.ApplyInput{
 		UserID:             user.ID,
 		WeeklyCostKobo:     req.WeeklyCostKobo,
-		Situation:          req.Situation,
+		Situation:          situation,
 		DisbursementMethod: req.DisbursementMethod,
 	})
 	if err != nil {
@@ -66,7 +74,15 @@ func (h *RecipientHandler) ResolveBank(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil || req.BankCode == "" || req.AccountNumber == "" {
 		return c.Status(400).JSON(fiber.Map{"error": "invalid_body"})
 	}
-	resolved, err := h.svc.ResolveBank(c.Context(), req.BankCode, req.AccountNumber)
+	bankCode, err := sanitize.DigitsOnly(req.BankCode, 3, sanitize.MaxBankCode)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "bank_code_invalid"})
+	}
+	accountNumber, err := sanitize.DigitsOnly(req.AccountNumber, 10, sanitize.MaxAccountNum)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "account_number_invalid"})
+	}
+	resolved, err := h.svc.ResolveBank(c.Context(), bankCode, accountNumber)
 	if err != nil {
 		return fail(c, err, "could_not_resolve")
 	}
@@ -86,11 +102,19 @@ func (h *RecipientHandler) SaveBank(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil || req.BankCode == "" || req.AccountNumber == "" {
 		return c.Status(400).JSON(fiber.Map{"error": "invalid_body"})
 	}
+	bankCode, err := sanitize.DigitsOnly(req.BankCode, 3, sanitize.MaxBankCode)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "bank_code_invalid"})
+	}
+	accountNumber, err := sanitize.DigitsOnly(req.AccountNumber, 10, sanitize.MaxAccountNum)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "account_number_invalid"})
+	}
 	bank, err := h.svc.SaveBank(c.Context(), service.SaveBankInput{
 		UserID:        user.ID,
-		BankCode:      req.BankCode,
+		BankCode:      bankCode,
 		BankName:      req.BankName,
-		AccountNumber: req.AccountNumber,
+		AccountNumber: accountNumber,
 	})
 	if err != nil {
 		return fail(c, err, "save_bank_failed")

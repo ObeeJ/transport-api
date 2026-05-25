@@ -3,6 +3,7 @@ package handlers
 import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/obeej/akin/internal/middleware"
+	"github.com/obeej/akin/internal/sanitize"
 	"github.com/obeej/akin/internal/service"
 )
 
@@ -67,7 +68,11 @@ func (h *EmailVerifyHandler) Confirm(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil || req.Token == "" {
 		return c.Status(400).JSON(fiber.Map{"error": "invalid_body"})
 	}
-	if err := h.svc.Confirm(user.ID, req.Token); err != nil {
+	token, err := sanitize.Alnum(req.Token, 32)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "invalid_verify_token"})
+	}
+	if err := h.svc.Confirm(user.ID, token); err != nil {
 		return fail(c, err, "confirm_failed")
 	}
 	return c.JSON(fiber.Map{"ok": true})
