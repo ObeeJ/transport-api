@@ -229,6 +229,12 @@ function humanizeError(code: string): string {
       return 'Phone must be a valid Nigerian number.'
     case 'password_too_short':
       return 'Password must be at least 8 characters.'
+    case 'password_too_long':
+      return 'Password is too long.'
+    case 'first_name_invalid':
+      return 'First name contains invalid characters or is too long.'
+    case 'last_name_invalid':
+      return 'Last name contains invalid characters or is too long.'
     case 'invalid_credentials':
       return 'Email or password is incorrect.'
     case 'privacy_required':

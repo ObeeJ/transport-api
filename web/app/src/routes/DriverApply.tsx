@@ -124,6 +124,7 @@ export function DriverApply() {
           <div className="card-base px-4 py-3.5 bg-[var(--color-cream)]">
             <input
               required
+              maxLength={16}
               value={vehiclePlate}
               onChange={(e) => setVehiclePlate(e.target.value)}
               placeholder="ABJ-432-KJA"
@@ -137,6 +138,7 @@ export function DriverApply() {
           <div className="card-base px-4 py-3.5 bg-[var(--color-cream)]">
             <input
               required
+              maxLength={40}
               value={licenseNumber}
               onChange={(e) => setLicenseNumber(e.target.value)}
               placeholder="ABC12345678901"
@@ -151,6 +153,7 @@ export function DriverApply() {
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
+              maxLength={600}
               rows={3}
               placeholder="Anything stewards should know about your route or availability."
               className="w-full bg-transparent text-sm outline-none placeholder:text-[var(--color-stone-soft)] resize-none"
