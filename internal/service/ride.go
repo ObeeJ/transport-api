@@ -230,6 +230,9 @@ func (s *RideService) CompleteTrip(tripID, driverID uuid.UUID) error {
 	// Roll active bookings forward so the rider's history is accurate.
 	// Audit-logged as part of the trip transition; we don't audit-log per booking.
 	_ = s.repo.CompleteTripBookings(tripID)
+	// Privacy-safe corroboration that the trip really happened (driver GPS only,
+	// boolean outcome). Soft — never blocks anything; runs once at completion.
+	defaultGPS.CorroborateTripJourney(tripID)
 	return nil
 }
 
@@ -258,6 +261,13 @@ func (s *RideService) CancelTrip(tripID, driverID uuid.UUID, reason string) erro
 }
 
 func (s *RideService) BookSeat(ctx context.Context, tripID, riderID uuid.UUID) (*models.Booking, error) {
+	// Suspended riders (repeated no-shows / abuse) can't take a scarce
+	// subsidised seat — that capacity should go to someone who'll use it.
+	if suspended, err := defaultIntegrity.IsSuspended(riderID); err != nil {
+		return nil, err
+	} else if suspended {
+		return nil, ErrSuspended
+	}
 	trip, err := s.repo.FindTrip(tripID)
 	if err != nil {
 		return nil, ErrTripNotFound

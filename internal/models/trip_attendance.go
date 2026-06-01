@@ -11,8 +11,9 @@ import (
 // Marked by the driver at departure. Used for trust scoring later.
 // Status: boarded | no_show
 type TripAttendance struct {
-	ID        uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
-	BookingID uuid.UUID `gorm:"type:uuid;uniqueIndex;not null" json:"bookingId"`
+	ID            uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+	InstitutionID uuid.UUID `gorm:"type:uuid;index;not null;default:'00000000-0000-0000-0000-000000000001'" json:"-"`
+	BookingID     uuid.UUID `gorm:"type:uuid;uniqueIndex;not null" json:"bookingId"`
 	TripID    uuid.UUID `gorm:"type:uuid;index;not null" json:"tripId"`
 	RiderID   uuid.UUID `gorm:"type:uuid;index;not null" json:"riderId"`
 	Status    string    `gorm:"not null;index" json:"status"` // boarded | no_show

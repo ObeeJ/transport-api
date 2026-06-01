@@ -29,9 +29,13 @@ func (r *RecipientRepo) FindByPseudonymousID(pseudo string) (*models.Recipient, 
 	return &rec, r.db.Where("pseudonymous_id = ?", pseudo).First(&rec).Error
 }
 
-func (r *RecipientRepo) ListPending() ([]models.Recipient, error) {
+// ListPending returns pending recipients for one institution. The institutionID
+// argument is required (not optional) so a caller physically cannot run an
+// unscoped, cross-tenant query — the compiler enforces tenant isolation.
+func (r *RecipientRepo) ListPending(institutionID uuid.UUID) ([]models.Recipient, error) {
 	var items []models.Recipient
-	return items, r.db.Where("status = ?", "pending").Order("created_at asc").Find(&items).Error
+	return items, r.db.Where("institution_id = ? AND status = ?", institutionID, "pending").
+		Order("created_at asc").Find(&items).Error
 }
 
 func (r *RecipientRepo) HasActiveRecipient(userID uuid.UUID) (bool, error) {
@@ -40,7 +44,19 @@ func (r *RecipientRepo) HasActiveRecipient(userID uuid.UUID) (bool, error) {
 	return count > 0, err
 }
 
-func (r *RecipientRepo) ListApproved() ([]models.Recipient, error) {
+// ListApproved returns approved recipients for one institution. Required
+// institutionID — see ListPending for why this is mandatory, not optional.
+func (r *RecipientRepo) ListApproved(institutionID uuid.UUID) ([]models.Recipient, error) {
+	var items []models.Recipient
+	return items, r.db.Where("institution_id = ? AND status = ?", institutionID, "approved").
+		Order("decided_at desc").Find(&items).Error
+}
+
+// ListAllApproved returns approved recipients across ALL institutions. Used
+// only by system jobs that have no request context (e.g. the weekly credit
+// reconciler), which read each row's InstitutionID to stay tenant-correct.
+// Never call this from a request handler — use ListApproved.
+func (r *RecipientRepo) ListAllApproved() ([]models.Recipient, error) {
 	var items []models.Recipient
 	return items, r.db.Where("status = ?", "approved").Order("decided_at desc").Find(&items).Error
 }

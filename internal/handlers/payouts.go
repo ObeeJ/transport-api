@@ -18,7 +18,7 @@ func NewPayoutHandler(svc *service.PayoutService) *PayoutHandler {
 }
 
 func (h *PayoutHandler) Preview(c *fiber.Ctx) error {
-	preview, err := h.svc.Preview()
+	preview, err := h.svc.Preview(middleware.CurrentInstitution(c))
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": "preview_failed"})
 	}
@@ -27,7 +27,7 @@ func (h *PayoutHandler) Preview(c *fiber.Ctx) error {
 
 func (h *PayoutHandler) InitiateBatch(c *fiber.Ctx) error {
 	steward := middleware.CurrentUser(c)
-	batchID, count, err := h.svc.InitiateBatch(steward.ID)
+	batchID, count, err := h.svc.InitiateBatch(steward.InstitutionID, steward.ID)
 	if err != nil {
 		return fail(c, err, "batch_failed")
 	}
@@ -131,7 +131,7 @@ func (h *PayoutHandler) Withdraw(c *fiber.Ctx) error {
 }
 
 func (h *PayoutHandler) ApprovedRecipients(c *fiber.Ctx) error {
-	items, err := h.svc.ApprovedRecipients()
+	items, err := h.svc.ApprovedRecipients(middleware.CurrentInstitution(c))
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": "query_failed"})
 	}

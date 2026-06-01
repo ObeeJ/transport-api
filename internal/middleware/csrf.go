@@ -23,6 +23,7 @@ type CookieOpts struct {
 	Name        string
 	Value       string
 	Path        string
+	Domain      string // empty = host-only
 	SameSite    string // "Lax" | "None" | "Strict"
 	Secure      bool
 	HTTPOnly    bool
@@ -40,6 +41,10 @@ func SetCookie(c *fiber.Ctx, o CookieOpts) {
 	if o.Path != "" {
 		b.WriteString("; Path=")
 		b.WriteString(o.Path)
+	}
+	if o.Domain != "" {
+		b.WriteString("; Domain=")
+		b.WriteString(o.Domain)
 	}
 	if o.MaxAge > 0 {
 		b.WriteString("; Max-Age=")
@@ -86,7 +91,7 @@ func itoaPositive(n int) string {
 //
 // In production the cookie carries `SameSite=None; Secure; Partitioned`
 // so it works as a cross-site cookie under modern browser privacy rules.
-func CSRFCookie(prod bool) fiber.Handler {
+func CSRFCookie(prod bool, domain, sameSiteOverride string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tok := c.Cookies(csrfCookieName)
 		if tok == "" {
@@ -95,14 +100,21 @@ func CSRFCookie(prod bool) fiber.Handler {
 			if prod {
 				sameSite = "None"
 			}
+			if sameSiteOverride != "" {
+				sameSite = sameSiteOverride
+			}
+			// Partitioned (CHIPS) only matters for cross-site cookies. Once the
+			// cookie is same-site (SameSite!="None") it's first-party, so drop it.
+			partitioned := prod && sameSite == "None"
 			SetCookie(c, CookieOpts{
 				Name:        csrfCookieName,
 				Value:       tok,
 				Path:        "/",
+				Domain:      domain,
 				SameSite:    sameSite,
 				Secure:      prod,
 				HTTPOnly:    false, // JS needs to read this (when document.cookie works)
-				Partitioned: prod,
+				Partitioned: partitioned,
 			})
 		}
 		// Store the effective token in Locals so /auth/csrf can return it in

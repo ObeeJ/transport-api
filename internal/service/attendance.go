@@ -214,6 +214,15 @@ func (s *AttendanceService) Was(userID uuid.UUID, weekStart time.Time) (bool, bo
 // can unblock by uploading a CSV row OR by a driver marking the recipient
 // boarded on a trip that lands in the relevant week.
 func (s *AttendanceService) EligibleForPayout(userID uuid.UUID) error {
+	// Suspended recipients (repeated no-shows / abuse) are not paid until their
+	// strikes age out or a steward clears them — the consequence side of
+	// "took the money but didn't show up".
+	if suspended, err := defaultIntegrity.IsSuspended(userID); err != nil {
+		return err
+	} else if suspended {
+		return ErrSuspended
+	}
+
 	thisWeek := models.WeekStartOf(time.Now())
 	lastWeek := thisWeek.AddDate(0, 0, -7)
 

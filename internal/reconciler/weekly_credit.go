@@ -47,7 +47,7 @@ func (j *WeeklyCreditJob) Run() {
 	if j == nil || j.recipients == nil || j.wallet == nil {
 		return
 	}
-	recipients, err := j.recipients.ListApproved()
+	recipients, err := j.recipients.ListAllApproved()
 	if err != nil {
 		slog.Error("weekly_credit: list approved", "err", err)
 		return

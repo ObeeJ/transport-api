@@ -346,5 +346,10 @@ func (s *DriverService) MarkAttendance(input MarkAttendanceInput) (*models.TripA
 	audit.Record(s.db, input.DriverID.String(), "attendance_marked", a.ID.String(), map[string]any{
 		"status": input.Status,
 	})
+	// A no-show means the rider held a subsidised seat someone else couldn't
+	// take. Record a strike (best-effort — never block the driver's marking).
+	if input.Status == "no_show" {
+		_ = defaultIntegrity.RecordRideNoShow(input.RiderID, input.TripID)
+	}
 	return a, nil
 }

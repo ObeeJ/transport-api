@@ -65,7 +65,12 @@ func seedInstitution(gdb *gorm.DB) error {
 	if err := gdb.Where("slug = ?", models.DefaultInstitutionSlug).First(&existing).Error; err == nil {
 		return nil
 	}
+	// Use the canonical fixed ID (not a random one) so this AutoMigrate seed
+	// agrees with goose migration 00002, which backfills all existing rows to
+	// exactly this id. A random id here would silently orphan every row from
+	// its institution once query scoping is enforced.
 	return gdb.Create(&models.Institution{
+		ID:     models.DefaultInstitutionID,
 		Name:   "Default Institution",
 		Slug:   models.DefaultInstitutionSlug,
 		Active: true,

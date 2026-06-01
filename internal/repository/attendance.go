@@ -69,3 +69,16 @@ func (r *AttendanceRepo) AttendanceRate(from, to time.Time) (float64, error) {
 	}
 	return float64(attended) / float64(total) * 100, nil
 }
+
+// AttendedCount returns the number of confirmed-present attendance rows whose
+// week falls in [from, to). This is the "verified attendances" figure shown to
+// givers — concrete proof their contribution translated into people actually
+// turning up, not just money moved.
+func (r *AttendanceRepo) AttendedCount(from, to time.Time) (int64, error) {
+	var n int64
+	err := r.db.Model(&models.Attendance{}).
+		Where("week_start >= ? AND week_start < ?", from, to).
+		Where("attended = ?", true).
+		Count(&n).Error
+	return n, err
+}

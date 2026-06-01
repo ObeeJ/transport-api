@@ -29,3 +29,12 @@ func (i *Institution) BeforeCreate(_ *gorm.DB) error {
 
 // DefaultInstitutionSlug is the slug seeded on first boot.
 const DefaultInstitutionSlug = "default"
+
+// DefaultInstitutionID is the canonical UUID of the seeded default institution.
+// It MUST match the id used in migration 00002_institution.sql, because all
+// existing rows are backfilled to it. Both the AutoMigrate seed and the goose
+// migration use this exact value so the institution row and the data that
+// references it never disagree (a mismatch would make every tenant-scoped
+// query return zero rows). All new tenant data defaults to this id until a
+// real institution is resolved at signup.
+var DefaultInstitutionID = uuid.MustParse("00000000-0000-0000-0000-000000000001")

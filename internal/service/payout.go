@@ -78,6 +78,7 @@ const (
 	SkipNoBank      SkipReason = "no_bank_on_file"
 	SkipNoCap       SkipReason = "no_weekly_cap_set"
 	SkipNotApproved SkipReason = "not_approved"
+	SkipSuspended   SkipReason = "suspended"
 )
 
 // BatchPreviewLine is one recipient's entry in the preview.
@@ -100,8 +101,8 @@ type BatchPreview struct {
 	Skipped      int                `json:"skipped"`
 }
 
-func (s *PayoutService) Preview() (*BatchPreview, error) {
-	recipients, err := s.recipients.ListApproved()
+func (s *PayoutService) Preview(institutionID uuid.UUID) (*BatchPreview, error) {
+	recipients, err := s.recipients.ListApproved(institutionID)
 	if err != nil {
 		return nil, err
 	}
@@ -142,6 +143,8 @@ func (s *PayoutService) Preview() (*BatchPreview, error) {
 					} else {
 						line.SkipReason = SkipNoRecord
 					}
+				} else if errors.Is(err, ErrSuspended) {
+					line.SkipReason = SkipSuspended
 				} else {
 					line.SkipReason = SkipAbsent
 				}
@@ -158,8 +161,8 @@ func (s *PayoutService) Preview() (*BatchPreview, error) {
 	return preview, nil
 }
 
-func (s *PayoutService) InitiateBatch(stewardID uuid.UUID) (uuid.UUID, int, error) {
-	preview, err := s.Preview()
+func (s *PayoutService) InitiateBatch(institutionID, stewardID uuid.UUID) (uuid.UUID, int, error) {
+	preview, err := s.Preview(institutionID)
 	if err != nil {
 		return uuid.Nil, 0, err
 	}
@@ -176,6 +179,7 @@ func (s *PayoutService) InitiateBatch(stewardID uuid.UUID) (uuid.UUID, int, erro
 	payouts := make([]*models.Payout, 0, len(eligible))
 	for _, l := range eligible {
 		payouts = append(payouts, &models.Payout{
+			InstitutionID: institutionID,
 			BatchID:       &batchID,
 			RecipientID:   l.RecipientID,
 			AmountKobo:    l.AmountKobo,
@@ -432,8 +436,8 @@ type ApprovedRecipient struct {
 	AccountName string `json:"accountName,omitempty"`
 }
 
-func (s *PayoutService) ApprovedRecipients() ([]ApprovedRecipient, error) {
-	rs, err := s.recipients.ListApproved()
+func (s *PayoutService) ApprovedRecipients(institutionID uuid.UUID) ([]ApprovedRecipient, error) {
+	rs, err := s.recipients.ListApproved(institutionID)
 	if err != nil {
 		return nil, err
 	}

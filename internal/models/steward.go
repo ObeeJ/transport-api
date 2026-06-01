@@ -15,6 +15,7 @@ import (
 // is just the audit-grade evidence trail.
 type StewardAction struct {
 	ID            uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+	InstitutionID uuid.UUID `gorm:"type:uuid;index;not null;default:'00000000-0000-0000-0000-000000000001'" json:"-"`
 	StewardID     uuid.UUID `gorm:"type:uuid;index;not null" json:"stewardId"`
 	SubjectType   string    `gorm:"index;not null" json:"subjectType"` // "recipient" | "weekly_cap" | "payout"
 	SubjectID     uuid.UUID `gorm:"type:uuid;index;not null" json:"subjectId"`

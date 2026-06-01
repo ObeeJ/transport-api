@@ -21,7 +21,7 @@ type VehicleType = 'car' | 'bus' | 'minivan'
 // Nigerian plate: up to 3 letters, 3 digits, 2 letters — but we accept
 // any alphanumeric + hyphen up to 16 chars. Just reject obvious garbage
 // like an email address or a sentence.
-const PLATE_RE = /^[A-Z0-9][A-Z0-9\-]{1,14}[A-Z0-9]$/i
+const PLATE_RE = /^[A-Z0-9][A-Z0-9-]{1,14}[A-Z0-9]$/i
 // Nigerian FRSC licence: 3 letters + 10–12 alphanumeric chars, but we
 // accept any alphanumeric 6–40 chars to cover older formats.
 const LICENCE_RE = /^[A-Z0-9]{6,40}$/i

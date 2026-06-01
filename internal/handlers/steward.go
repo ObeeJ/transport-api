@@ -18,7 +18,7 @@ func NewStewardHandler(svc *service.StewardService) *StewardHandler {
 }
 
 func (h *StewardHandler) Queue(c *fiber.Ctx) error {
-	items, err := h.svc.Queue()
+	items, err := h.svc.Queue(middleware.CurrentInstitution(c))
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": "query_failed"})
 	}

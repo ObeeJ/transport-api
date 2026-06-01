@@ -21,6 +21,19 @@ type Config struct {
 	APIBaseURL        string
 	AppBaseURL        string
 	CORSAllowedOrigin string
+	// Cookie scoping for the auth session + CSRF cookies.
+	//
+	// CookieDomain — leave empty for host-only cookies (correct for
+	// same-origin / reverse-proxy deployments, e.g. the app calling /api
+	// behind a Vercel rewrite). Set to a parent domain like ".akin.app" to
+	// share the session across app.akin.app + api.akin.app.
+	//
+	// CookieSameSite — overrides the SameSite attribute. Empty keeps the
+	// default ("None" in prod, "Lax" in dev). Set to "Lax" once the app and
+	// API are same-site so auth no longer depends on third-party cookies,
+	// which Safari/iOS ITP blocks.
+	CookieDomain   string
+	CookieSameSite string
 	// MockTransfers — when true, the payout confirm flow skips the real
 	// Paystack Transfer call and marks the payout succeeded locally.
 	// Set this in development if your Paystack account is "starter" and
@@ -49,6 +62,8 @@ func Load() (*Config, error) {
 		APIBaseURL:          env("API_BASE_URL", "http://localhost:8080"),
 		AppBaseURL:          env("APP_BASE_URL", "http://localhost:5173"),
 		CORSAllowedOrigin:   env("CORS_ALLOWED_ORIGIN", "http://localhost:5173"),
+		CookieDomain:        env("COOKIE_DOMAIN", ""),
+		CookieSameSite:      env("COOKIE_SAMESITE", ""),
 		MockTransfers:       env("MOCK_TRANSFERS", "false") == "true",
 		EmailFrom:           env("EMAIL_FROM", "Akin <noreply@example.com>"),
 		SMTPHost:            env("SMTP_HOST", ""),
