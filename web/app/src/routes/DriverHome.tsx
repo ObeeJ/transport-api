@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { Link } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'motion/react'
@@ -29,16 +29,8 @@ function defaultDepartureLocal(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-// Fallback axes used while /driver/opportunities is loading and when the
-// query returns no data yet. The API returns the same shape.
-const fallbackHours = ['07:30', '09:00', '11:00', '13:00', '15:00', '17:00']
-const fallbackHubs = ['Main Gate', 'Sub Gate', 'Tech Hub', 'Health Science']
-const fallbackMatrix: number[][] = [
-  [0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0],
-]
+const emptyMatrix = (rows: number, cols: number): number[][] =>
+  Array.from({ length: rows }, () => Array(cols).fill(0))
 
 export function DriverHome() {
   const qc = useQueryClient()
@@ -73,23 +65,61 @@ export function DriverHome() {
   const isApproved = driverProfile.data?.status === 'approved'
   const hasPending = driverProfile.data?.status === 'pending'
 
+  const [toast, setToast] = useState<string | null>(null)
+  useEffect(() => {
+    if (!hasPending) return
+    const t = setTimeout(() => setToast('Your driver profile is under review — we\'ll notify you when it\'s approved.'), 0)
+    const hide = setTimeout(() => setToast(null), 6000)
+    return () => { clearTimeout(t); clearTimeout(hide) }
+  }, [hasPending])
+
   const opportunity = useQuery<{ hubs: string[]; hours: string[]; matrix: number[][] }>({
     queryKey: ['driver', 'opportunities'],
     queryFn: () => api.get('/driver/opportunities'),
     enabled: !!user,
     staleTime: 60 * 1000,
   })
-  const opportunityHubs = opportunity.data?.hubs ?? fallbackHubs
-  const opportunityHours = opportunity.data?.hours ?? fallbackHours
-  const shortageMatrix = opportunity.data?.matrix ?? fallbackMatrix
+  const opportunityHubs = opportunity.data?.hubs ?? []
+  const opportunityHours = opportunity.data?.hours ?? []
+  const shortageMatrix = opportunity.data?.matrix ?? emptyMatrix(opportunityHubs.length, opportunityHours.length)
 
   return (
-    <motion.div
-      variants={stagger(0.08, 0.04)}
-      initial="hidden"
-      animate="show"
-      className="pt-4 space-y-6"
-    >
+    <>
+      <AnimatePresence>
+        {toast ? (
+          <motion.div
+            key="toast"
+            initial={{ opacity: 0, y: -12, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.97 }}
+            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+            className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-sm"
+          >
+            <div
+              className="flex items-start gap-3 px-4 py-3.5 rounded-[14px] border border-[var(--color-hairline)] bg-[var(--color-paper)]/95 backdrop-blur-md"
+              style={{ boxShadow: '0 8px 32px -8px rgba(27,42,78,0.18), 0 2px 8px rgba(27,42,78,0.06)' }}
+            >
+              <span className="mt-0.5 shrink-0 size-1.5 rounded-full bg-[var(--color-stone)] animate-pulse" />
+              <p className="text-[12px] leading-[1.55] text-[var(--color-ink)] flex-1">{toast}</p>
+              <button
+                onClick={() => setToast(null)}
+                className="shrink-0 text-[var(--color-stone-soft)] hover:text-[var(--color-stone)] transition-colors mt-0.5"
+                style={{ minHeight: 'unset' }}
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <path d="M1 1l10 10M11 1L1 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+              </button>
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+      <motion.div
+        variants={stagger(0.08, 0.04)}
+        initial="hidden"
+        animate="show"
+        className="pt-4 space-y-6"
+      >
       {/* Personalized Welcome Banner */}
       <motion.p
         variants={fadeUp}
@@ -125,12 +155,43 @@ export function DriverHome() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             transition={transition.default}
-            className="card-base p-5 border-l-4 border-l-[var(--color-stone)]"
+            className="relative overflow-hidden rounded-[18px] border border-[var(--color-hairline)] bg-[var(--color-paper)]"
+            style={{ boxShadow: '0 4px 24px -8px rgba(27,42,78,0.08), 0 1px 2px rgba(27,42,78,0.03)' }}
           >
-            <div className="label-cap font-bold text-[var(--color-stone)]">Verification in progress</div>
-            <p className="mt-1.5 text-xs text-[var(--color-stone)] leading-relaxed">
-              Two stewards are currently verifying your credentials. You will receive an alert as soon as they authorize your profile.
-            </p>
+            {/* Subtle top gradient bar */}
+            <div className="absolute inset-x-0 top-0 h-[2px] rounded-t-[18px]" style={{ background: 'linear-gradient(90deg, var(--color-stone-soft) 0%, var(--color-hairline) 100%)' }} />
+            <div className="p-5">
+              <div className="flex items-start gap-3.5">
+                {/* Animated status orb */}
+                <div className="mt-0.5 shrink-0 relative size-8 rounded-full bg-[var(--color-cream-2)] border border-[var(--color-hairline)] flex items-center justify-center">
+                  <span className="absolute size-3 rounded-full bg-[var(--color-stone-soft)] animate-ping opacity-40" />
+                  <span className="relative size-2 rounded-full bg-[var(--color-stone)]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-semibold tracking-[0.08em] uppercase text-[var(--color-indigo)]">Under review</span>
+                    <span className="text-[9px] font-mono font-bold tracking-wider text-[var(--color-stone)] bg-[var(--color-cream-2)] px-2 py-0.5 rounded-full border border-[var(--color-hairline)]">2 of 2 stewards</span>
+                  </div>
+                  <p className="mt-1.5 text-[12px] leading-[1.6] text-[var(--color-stone)]">
+                    Your driver profile is being verified. You'll get a notification the moment both stewards sign off.
+                  </p>
+                  {/* Progress track */}
+                  <div className="mt-3.5 flex items-center gap-2.5">
+                    <div className="flex gap-1.5">
+                      {[0, 1].map((i) => (
+                        <div key={i} className="flex items-center gap-1">
+                          <div className="size-5 rounded-full border border-[var(--color-hairline)] bg-[var(--color-cream-2)] flex items-center justify-center">
+                            <span className="size-1.5 rounded-full bg-[var(--color-stone-soft)] animate-pulse" />
+                          </div>
+                          {i === 0 && <div className="w-4 h-px bg-[var(--color-hairline)]" />}
+                        </div>
+                      ))}
+                    </div>
+                    <span className="text-[10px] text-[var(--color-stone-soft)] font-medium">Awaiting both signatures</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </motion.div>
         ) : null}
       </AnimatePresence>
@@ -148,158 +209,151 @@ export function DriverHome() {
           <span className="text-[10px] bg-[var(--color-clay)]/10 text-[var(--color-clay)] px-2 py-0.5 rounded font-mono font-bold tracking-wider">Live</span>
         </div>
 
-        {/* Activity Pillar Track Layout */}
-        <div className="mt-5 space-y-3">
-          {/* Header Row */}
-          <div className="grid grid-cols-[80px_1fr] gap-3 items-center">
-            <span className="text-[9px] font-mono text-[var(--color-stone)] font-bold uppercase tracking-wider">Hub Location</span>
-            <div className="grid grid-cols-6 gap-1.5 text-center text-[9px] font-mono text-[var(--color-stone)] font-semibold">
-              {opportunityHours.map((hr, idx) => (
-                <div
-                  key={idx}
-                  className={`transition-colors duration-150 py-0.5 rounded ${
-                    active?.hour === hr ? 'text-[var(--color-clay)] font-bold bg-[var(--color-clay)]/5 scale-105' : ''
-                  }`}
-                >
-                  {hr}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Hub Rows */}
-          <div className="space-y-2">
-            {opportunityHubs.map((hubName, hubIdx) => (
-              <div key={hubIdx} className="grid grid-cols-[80px_1fr] gap-3 items-center">
-                {/* Row Header (Hub Name) */}
-                <span
-                  className={`text-[10px] font-medium transition-all duration-150 py-1 rounded truncate text-left ${
-                    active && active.hub === hubName
-                      ? 'text-[var(--color-clay)] font-bold bg-[var(--color-clay)]/5 pl-1.5'
-                      : 'text-[var(--color-indigo)] pl-1'
-                  }`}
-                >
-                  {hubName}
-                </span>
-
-                {/* Hourly Pillars */}
-                <div className="grid grid-cols-6 gap-1.5">
-                  {shortageMatrix[hubIdx].map((val, cellIdx) => {
-                    const isHovered = activeCell && activeCell.hub === hubName && activeCell.hour === opportunityHours[cellIdx];
-                    const isSelected = selectedCell && selectedCell.hub === hubName && selectedCell.hour === opportunityHours[cellIdx];
-                    const isActive = isHovered || isSelected;
-
-                    return (
-                      <motion.div
-                        key={cellIdx}
-                        whileHover={{ scale: 1.04, translateY: -2 }}
-                        onClick={() => {
-                          if (selectedCell && selectedCell.hub === hubName && selectedCell.hour === opportunityHours[cellIdx]) {
-                            setSelectedCell(null);
-                          } else {
-                            setSelectedCell({ hub: hubName, hour: opportunityHours[cellIdx], val });
-                          }
-                        }}
-                        onMouseEnter={() => setActiveCell({ hub: hubName, hour: opportunityHours[cellIdx], val })}
-                        onMouseLeave={() => setActiveCell(null)}
-                        className={`h-[72px] flex flex-col justify-between items-center py-2 rounded-lg cursor-pointer border select-none transition-all duration-200 ${
-                          isActive
-                            ? 'border-[var(--color-clay)] ring-2 ring-[var(--color-clay)] ring-offset-1 bg-white shadow-md z-10'
-                            : 'border-[var(--color-hairline)] bg-[var(--color-paper)]/60 hover:bg-white/90 hover:border-[var(--color-stone-soft)] shadow-sm'
-                        } ${isSelected ? 'animate-pulse' : ''}`}
-                      >
-                        {/* Tiny hour indicator */}
-                        <span className="text-[8px] font-mono text-[var(--color-stone-soft)] leading-none">
-                          {opportunityHours[cellIdx]}
-                        </span>
-
-                        {/* Vertical Gauge Bar */}
-                        <div className="w-1.5 h-6 bg-[var(--color-cream-2)]/60 rounded-full overflow-hidden relative">
-                          <div
-                            className={`absolute bottom-0 left-0 w-full rounded-full transition-all duration-300 heat-driver-${val}`}
-                            style={{ height: `${Math.max(val * 25, 8)}%` }}
-                          />
-                        </div>
-
-                        {/* Direct count text */}
-                        <span className="text-[9px] font-mono font-bold text-[var(--color-indigo)] leading-none">
-                          {val === 0 ? 'Met' : `+${val * 3}`}
-                        </span>
-                      </motion.div>
-                    );
-                  })}
-                </div>
-              </div>
+        {opportunity.isLoading ? (
+          <div className="mt-5 grid grid-cols-6 gap-1.5">
+            {Array.from({ length: 24 }).map((_, i) => (
+              <div key={i} className="h-[72px] rounded-lg bg-[var(--color-cream-2)] animate-pulse" />
             ))}
           </div>
-        </div>
-
-        {/* Dynamic Telemetry Panel */}
-        <div className="card-base p-3.5 mt-4 border border-[var(--color-hairline)] bg-[var(--color-paper)]/50 relative overflow-hidden">
-          <AnimatePresence mode="wait">
-            {active ? (
-              <motion.div
-                key={`${active.hub}-${active.hour}`}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
-              >
-                <div className="flex items-center gap-2">
-                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 heat-driver-${active.val} ${active.val === 4 ? 'animate-pulse ring-2 ring-[var(--color-clay)]/30' : ''}`} />
-                  <div>
-                    <span className="text-xs font-semibold text-[var(--color-indigo)]">
-                      {active.hub} at {active.hour}
-                    </span>
-                    <p className="text-[10px] text-[var(--color-stone)]">
-                      {active.val === 0 && "Demand fully met: no passengers stranded, perfect seat availability"}
-                      {active.val === 1 && "Light shortage: minor transit delay, average wait time 3 minutes"}
-                      {active.val === 2 && "Moderate seat shortage: publication of new trips recommended"}
-                      {active.val === 3 && "High demand gap: severe wait queue, publish trip immediately"}
-                      {active.val === 4 && "Critical shortage: surging passenger backlog, maximum earnings opportunity"}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
-                  <div className="text-right">
-                    <span className="text-[10px] uppercase font-mono tracking-wider text-[var(--color-stone)] block">Commuter Backlog</span>
-                    <span className="text-xs font-bold text-[var(--color-clay)] font-mono">{active.val === 0 ? '0 stranded' : `+${active.val * 3} stranded`}</span>
-                  </div>
-                  {selectedCell && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedCell(null);
-                      }}
-                      className="text-[10px] text-[var(--color-stone)] hover:text-[var(--color-coral)] font-mono px-2 py-1 rounded bg-[var(--color-cream-2)] border border-[var(--color-hairline)] hover:border-[var(--color-stone-soft)] transition-colors cursor-pointer"
-                    >
-                      clear ×
-                    </button>
-                  )}
-                </div>
-              </motion.div>
-            ) : (
-              <div className="text-[var(--color-stone)] text-[10px] uppercase tracking-wider flex items-center justify-center gap-2 py-1 w-full text-center">
-                <span className="animate-pulse w-1.5 h-1.5 rounded-full bg-[var(--color-stone-soft)]" />
-                <span>Tap or hover an hourly pillar to inspect departure opportunities</span>
-              </div>
-            )}
-          </AnimatePresence>
-        </div>
-
-        {/* Legend */}
-        <div className="mt-4 flex items-center justify-between text-[9px] text-[var(--color-stone)] font-mono">
-          <span>Met demand</span>
-          <div className="flex gap-1.5">
-            <span className="size-2.5 rounded-[2px] heat-driver-0 border border-[var(--color-hairline)]" />
-            <span className="size-2.5 rounded-[2px] heat-driver-1" />
-            <span className="size-2.5 rounded-[2px] heat-driver-2" />
-            <span className="size-2.5 rounded-[2px] heat-driver-3" />
-            <span className="size-2.5 rounded-[2px] heat-driver-4" />
+        ) : opportunityHubs.length === 0 ? (
+          <div className="mt-5 py-6 text-center">
+            <p className="text-[13px] font-medium text-[var(--color-indigo)]">No demand data yet</p>
+            <p className="mt-1 text-[11px] text-[var(--color-stone)]">
+              This map populates once riders start booking trips at your hubs.
+            </p>
           </div>
-          <span>Shortage (High queue)</span>
-        </div>
+        ) : (
+          <>
+            {/* Activity Pillar Track Layout */}
+            <div className="mt-5 space-y-3">
+              {/* Header Row */}
+              <div className="grid grid-cols-[80px_1fr] gap-3 items-center">
+                <span className="text-[9px] font-mono text-[var(--color-stone)] font-bold uppercase tracking-wider">Hub Location</span>
+                <div className={`grid gap-1.5 text-center text-[9px] font-mono text-[var(--color-stone)] font-semibold`} style={{ gridTemplateColumns: `repeat(${opportunityHours.length}, 1fr)` }}>
+                  {opportunityHours.map((hr, idx) => (
+                    <div
+                      key={idx}
+                      className={`transition-colors duration-150 py-0.5 rounded ${
+                        active?.hour === hr ? 'text-[var(--color-clay)] font-bold bg-[var(--color-clay)]/5 scale-105' : ''
+                      }`}
+                    >
+                      {hr}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Hub Rows */}
+              <div className="space-y-2">
+                {opportunityHubs.map((hubName, hubIdx) => (
+                  <div key={hubIdx} className="grid grid-cols-[80px_1fr] gap-3 items-center">
+                    <span
+                      className={`text-[10px] font-medium transition-all duration-150 py-1 rounded truncate text-left ${
+                        active && active.hub === hubName
+                          ? 'text-[var(--color-clay)] font-bold bg-[var(--color-clay)]/5 pl-1.5'
+                          : 'text-[var(--color-indigo)] pl-1'
+                      }`}
+                    >
+                      {hubName}
+                    </span>
+                    <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${opportunityHours.length}, 1fr)` }}>
+                      {shortageMatrix[hubIdx].map((val, cellIdx) => {
+                        const isHovered = activeCell && activeCell.hub === hubName && activeCell.hour === opportunityHours[cellIdx];
+                        const isSelected = selectedCell && selectedCell.hub === hubName && selectedCell.hour === opportunityHours[cellIdx];
+                        const isActive = isHovered || isSelected;
+                        return (
+                          <motion.div
+                            key={cellIdx}
+                            whileHover={{ scale: 1.04, translateY: -2 }}
+                            onClick={() => {
+                              if (isSelected) setSelectedCell(null)
+                              else setSelectedCell({ hub: hubName, hour: opportunityHours[cellIdx], val })
+                            }}
+                            onMouseEnter={() => setActiveCell({ hub: hubName, hour: opportunityHours[cellIdx], val })}
+                            onMouseLeave={() => setActiveCell(null)}
+                            className={`h-[72px] flex flex-col justify-between items-center py-2 rounded-lg cursor-pointer border select-none transition-all duration-200 ${
+                              isActive
+                                ? 'border-[var(--color-clay)] ring-2 ring-[var(--color-clay)] ring-offset-1 bg-white shadow-md z-10'
+                                : 'border-[var(--color-hairline)] bg-[var(--color-paper)]/60 hover:bg-white/90 hover:border-[var(--color-stone-soft)] shadow-sm'
+                            } ${isSelected ? 'animate-pulse' : ''}`}
+                          >
+                            <span className="text-[8px] font-mono text-[var(--color-stone-soft)] leading-none">{opportunityHours[cellIdx]}</span>
+                            <div className="w-1.5 h-6 bg-[var(--color-cream-2)]/60 rounded-full overflow-hidden relative">
+                              <div
+                                className={`absolute bottom-0 left-0 w-full rounded-full transition-all duration-300 heat-driver-${val}`}
+                                style={{ height: `${Math.max(val * 25, 8)}%` }}
+                              />
+                            </div>
+                            <span className="text-[9px] font-mono font-bold text-[var(--color-indigo)] leading-none">
+                              {val === 0 ? 'Met' : `+${val * 3}`}
+                            </span>
+                          </motion.div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Dynamic Telemetry Panel */}
+            <div className="card-base p-3.5 mt-4 border border-[var(--color-hairline)] bg-[var(--color-paper)]/50 relative overflow-hidden">
+              <AnimatePresence mode="wait">
+                {active ? (
+                  <motion.div
+                    key={`${active.hub}-${active.hour}`}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2.5 h-2.5 rounded-full shrink-0 heat-driver-${active.val} ${active.val === 4 ? 'animate-pulse ring-2 ring-[var(--color-clay)]/30' : ''}`} />
+                      <div>
+                        <span className="text-xs font-semibold text-[var(--color-indigo)]">{active.hub} at {active.hour}</span>
+                        <p className="text-[10px] text-[var(--color-stone)]">
+                          {active.val === 0 && 'Demand fully met: no passengers stranded, perfect seat availability'}
+                          {active.val === 1 && 'Light shortage: minor transit delay, average wait time 3 minutes'}
+                          {active.val === 2 && 'Moderate seat shortage: publication of new trips recommended'}
+                          {active.val === 3 && 'High demand gap: severe wait queue, publish trip immediately'}
+                          {active.val === 4 && 'Critical shortage: surging passenger backlog, maximum earnings opportunity'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                      <div className="text-right">
+                        <span className="text-[10px] uppercase font-mono tracking-wider text-[var(--color-stone)] block">Commuter Backlog</span>
+                        <span className="text-xs font-bold text-[var(--color-clay)] font-mono">{active.val === 0 ? '0 stranded' : `+${active.val * 3} stranded`}</span>
+                      </div>
+                      {selectedCell && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setSelectedCell(null) }}
+                          className="text-[10px] text-[var(--color-stone)] hover:text-[var(--color-coral)] font-mono px-2 py-1 rounded bg-[var(--color-cream-2)] border border-[var(--color-hairline)] hover:border-[var(--color-stone-soft)] transition-colors cursor-pointer"
+                        >
+                          clear ×
+                        </button>
+                      )}
+                    </div>
+                  </motion.div>
+                ) : (
+                  <div className="text-[var(--color-stone)] text-[10px] uppercase tracking-wider flex items-center justify-center gap-2 py-1 w-full text-center">
+                    <span className="animate-pulse w-1.5 h-1.5 rounded-full bg-[var(--color-stone-soft)]" />
+                    <span>Tap or hover an hourly pillar to inspect departure opportunities</span>
+                  </div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Legend */}
+            <div className="mt-4 flex items-center justify-between text-[9px] text-[var(--color-stone)] font-mono">
+              <span>Met demand</span>
+              <div className="flex gap-1.5">
+                {[0,1,2,3,4].map(v => <span key={v} className={`size-2.5 rounded-[2px] heat-driver-${v} ${v === 0 ? 'border border-[var(--color-hairline)]' : ''}`} />)}
+              </div>
+              <span>Shortage (High queue)</span>
+            </div>
+          </>
+        )}
       </motion.section>
 
       {/* Live active trip */}
@@ -361,12 +415,13 @@ export function DriverHome() {
       <Impact />
       <PastTrips trips={myTrips.data?.items ?? []} />
     </motion.div>
+    </>
   )
 }
 
 function PublishTripForm({ hubs, onCancel, onDone }: { hubs: Hub[]; onCancel: () => void; onDone: () => void }) {
   const [originHubId, setOriginHubId] = useState(hubs[0]?.id ?? '')
-  const [destination, setDestination] = useState('Faculty of Engineering')
+  const [destination, setDestination] = useState('')
   const [departureLocal, setDepartureLocal] = useState(defaultDepartureLocal())
   const [totalSeats, setTotalSeats] = useState(4)
   const [vehiclePlate, setVehiclePlate] = useState('')
@@ -677,7 +732,7 @@ function Impact() {
   const q = useQuery<{ seatsTotal: number; tripsTotal: number; kmTotal: number }>({
     queryKey: ['driver', 'impact'],
     queryFn: () => api.get('/driver/impact'),
-    retry: (count, err) => !(err instanceof ApiError && err.status === 404) && count < 1,
+    staleTime: 60 * 1000,
   })
   if (!q.data) return null
   const { seatsTotal, tripsTotal } = q.data
