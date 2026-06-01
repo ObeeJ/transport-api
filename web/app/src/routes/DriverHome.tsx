@@ -6,6 +6,7 @@ import { ApiError, api } from '@/lib/api'
 import { useTripSeats } from '@/lib/useSeats'
 import { fadeUp, stagger, transition } from '@/lib/motion'
 import { useAuth } from '@/lib/auth'
+import { useDriverGPS } from '@/lib/useDriverGPS'
 import { useToast } from '@/lib/toast'
 
 type Hub = { id: string; name: string }
@@ -574,6 +575,8 @@ function PublishTripForm({ hubs, onCancel, onDone }: { hubs: Hub[]; onCancel: ()
 
 function ActiveDriverTrip({ trip }: { trip: TripCard }) {
   const qc = useQueryClient()
+  // Send GPS breadcrumbs while the trip is in_transit.
+  useDriverGPS(trip.id, trip.status === 'in_transit')
   const toast = useToast()
   const detail = useQuery<{
     trip: TripCard

@@ -151,6 +151,8 @@ func (s *RideService) GetTrip(id, requesterID uuid.UUID) (map[string]any, error)
 	resp := map[string]any{
 		"trip":        trip,
 		"hubName":     hub.Name,
+		"hubLat":      hub.Lat,
+		"hubLng":      hub.Lng,
 		"bookedCount": len(bookings),
 		"seatsLeft":   trip.TotalSeats - len(bookings),
 		"isDriver":    isDriver,

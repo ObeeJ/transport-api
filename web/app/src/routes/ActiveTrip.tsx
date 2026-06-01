@@ -19,6 +19,8 @@ type TripDetail = {
     startedAt?: string
   }
   hubName: string
+  hubLat?: number
+  hubLng?: number
   bookedCount: number
   seatsLeft: number
   driverName?: string
@@ -64,6 +66,8 @@ export function ActiveTrip() {
           tripId={trip.id}
           status={trip.status}
           hubName={hubName}
+          hubLat={q.data.hubLat}
+          hubLng={q.data.hubLng}
           destination={trip.destination}
           departureAt={trip.departureAt}
           startedAt={trip.startedAt}
@@ -110,13 +114,37 @@ export function ActiveTrip() {
 
 type GPSPoint = { lat: number; lng: number; recordedAt: string }
 
+// Fetch ETA + distance from OSRM public demo API.
+// Called once when we have both the hub coords and a live GPS point.
+async function fetchOSRMRoute(
+  fromLat: number, fromLng: number,
+  toLat: number, toLng: number,
+): Promise<{ durationMin: number; distanceKm: number } | null> {
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?overview=false`
+    const res = await fetch(url)
+    if (!res.ok) return null
+    const data = await res.json() as { routes?: { duration: number; distance: number }[] }
+    const route = data.routes?.[0]
+    if (!route) return null
+    return {
+      durationMin: Math.round(route.duration / 60),
+      distanceKm: Math.round(route.distance / 100) / 10,
+    }
+  } catch {
+    return null
+  }
+}
+
 function TripMap({
-  tripId, status, hubName: _hubName, destination: _destination, departureAt, startedAt, driverName, vehiclePlate,
+  tripId, status, hubName: _hubName, destination: _destination, hubLat, hubLng, departureAt, startedAt, driverName, vehiclePlate,
 }: {
   tripId: string
   status: string
   hubName: string
   destination: string
+  hubLat?: number
+  hubLng?: number
   departureAt: string
   startedAt?: string
   driverName?: string
@@ -126,9 +154,11 @@ function TripMap({
   const mapInstance = useRef<maplibregl.Map | null>(null)
   const markerRef = useRef<maplibregl.Marker | null>(null)
   const isLive = status === 'in_transit'
+  const etaFetched = useRef(false)
+  const [eta, setEta] = useState<{ durationMin: number; distanceKm: number } | null>(null)
 
   const arriving = startedAt
-    ? new Date(new Date(startedAt).getTime() + 15 * 60 * 1000)
+    ? new Date(new Date(startedAt).getTime() + (eta?.durationMin ?? 15) * 60 * 1000)
     : new Date(departureAt)
 
   // Poll latest GPS point every 6s only when in_transit
@@ -198,6 +228,14 @@ function TripMap({
     else map.once('load', onLoad)
   }, [track.data])
 
+  // Fetch OSRM ETA once when first GPS point arrives and hub coords are known.
+  useEffect(() => {
+    if (!latest.data || !hubLat || !hubLng || etaFetched.current) return
+    etaFetched.current = true
+    fetchOSRMRoute(latest.data.lat, latest.data.lng, hubLat, hubLng)
+      .then((result) => { if (result) setEta(result) })
+  }, [latest.data, hubLat, hubLng])
+
   // Move driver marker to latest point
   useEffect(() => {
     const map = mapInstance.current
@@ -233,11 +271,16 @@ function TripMap({
           {isLive && <span className="size-2 rounded-full bg-[var(--color-moss)] animate-pulse shrink-0" />}
           <div>
             <div className="font-mono text-[10px] text-[var(--color-stone)]">
-              {isLive ? 'ARRIVING' : 'DEPARTS'}
+              {isLive ? (eta ? 'ETA' : 'ARRIVING') : 'DEPARTS'}
             </div>
             <div className="text-[15px] font-semibold tracking-tight text-[var(--color-indigo)] leading-tight">
-              {arriving.toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' })}
+              {eta && isLive
+                ? `~${eta.durationMin} min`
+                : arriving.toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' })}
             </div>
+            {eta && isLive && (
+              <div className="font-mono text-[9px] text-[var(--color-stone)]">{eta.distanceKm} km</div>
+            )}
           </div>
         </div>
         <div className="card-base px-3 py-2 bg-[var(--color-paper)]/90 backdrop-blur text-right">
