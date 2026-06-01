@@ -26,7 +26,6 @@ export function useRoles() {
     }
     // Return cache if same user
     if (cachedUserId === user.id && cachedRoles) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setRoles(cachedRoles)
       return
     }

@@ -20,6 +20,7 @@ export function Onboarding() {
   const [acceptedPrivacy, setAcceptedPrivacy] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [pwFocused, setPwFocused] = useState(false)
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -143,8 +144,13 @@ export function Onboarding() {
             placeholder="••••••••"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            onFocus={() => setPwFocused(true)}
+            onBlur={() => setPwFocused(false)}
             className="w-full bg-transparent text-sm outline-none placeholder:text-[var(--color-stone-soft)]"
           />
+          {mode === 'signup' && (pwFocused || password.length > 0) ? (
+            <PasswordStrength password={password} />
+          ) : null}
         </Field>
       </div>
 
@@ -216,6 +222,40 @@ function Field({ label, hint, children }: { label: React.ReactNode; hint?: strin
       </div>
       <div className="card-base px-4 py-3.5 bg-[var(--color-cream)]">{children}</div>
     </label>
+  )
+}
+
+function scorePassword(pw: string): { score: number; label: string; color: string } {
+  let score = 0
+  if (pw.length >= 8)  score++
+  if (pw.length >= 12) score++
+  if (/[A-Z]/.test(pw)) score++
+  if (/[0-9]/.test(pw)) score++
+  if (/[^A-Za-z0-9]/.test(pw)) score++
+  if (score <= 1) return { score, label: 'Weak',   color: 'bg-[var(--color-coral)]' }
+  if (score <= 2) return { score, label: 'Fair',   color: 'bg-amber-400' }
+  if (score <= 3) return { score, label: 'Good',   color: 'bg-yellow-400' }
+  if (score <= 4) return { score, label: 'Strong', color: 'bg-emerald-400' }
+  return               { score, label: 'Great',  color: 'bg-emerald-500' }
+}
+
+function PasswordStrength({ password }: { password: string }) {
+  const { score, label, color } = scorePassword(password)
+  const filled = Math.max(1, score)
+  return (
+    <div className="mt-3 space-y-1.5">
+      <div className="flex gap-1">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div
+            key={i}
+            className={`h-1 flex-1 rounded-full transition-colors duration-300 ${
+              i < filled ? color : 'bg-[var(--color-hairline)]'
+            }`}
+          />
+        ))}
+      </div>
+      <p className="text-[10px] text-[var(--color-stone)]">{label}</p>
+    </div>
   )
 }
 
