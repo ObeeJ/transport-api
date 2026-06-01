@@ -17,7 +17,7 @@ DO $$
 DECLARE
     legacy_id uuid;
 BEGIN
-    SELECT id INTO legacy_id FROM institutions WHERE slug = 'default';
+    SELECT id INTO legacy_id FROM institutions WHERE slug = 'default' AND id <> '00000000-0000-0000-0000-000000000001';
     IF legacy_id IS NOT NULL AND legacy_id <> '00000000-0000-0000-0000-000000000001' THEN
         -- Make sure the canonical row exists, then move data + drop the legacy row.
         INSERT INTO institutions (id, name, slug, active, created_at, updated_at)
@@ -32,8 +32,8 @@ BEGIN
         UPDATE trips           SET institution_id = '00000000-0000-0000-0000-000000000001' WHERE institution_id = legacy_id;
         UPDATE roster_entries  SET institution_id = '00000000-0000-0000-0000-000000000001' WHERE institution_id = legacy_id;
         UPDATE attendances     SET institution_id = '00000000-0000-0000-0000-000000000001' WHERE institution_id = legacy_id;
-        -- Update the slug-unique row to the canonical id last (avoids unique clash).
-        UPDATE institutions    SET id = '00000000-0000-0000-0000-000000000001' WHERE id = legacy_id;
+        -- All data has been repointed; the legacy row is now orphaned — delete it.
+        DELETE FROM institutions WHERE id = legacy_id;
     END IF;
 END $$;
 -- +goose StatementEnd
