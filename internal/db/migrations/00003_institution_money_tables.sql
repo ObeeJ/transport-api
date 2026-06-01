@@ -22,7 +22,7 @@ BEGIN
         -- Make sure the canonical row exists, then move data + drop the legacy row.
         INSERT INTO institutions (id, name, slug, active, created_at, updated_at)
         VALUES ('00000000-0000-0000-0000-000000000001', 'Default Institution', 'default', true, now(), now())
-        ON CONFLICT (id) DO NOTHING;
+        ON CONFLICT (slug) DO UPDATE SET id = '00000000-0000-0000-0000-000000000001';
         -- Repoint already-scoped tables that may have been backfilled to legacy_id.
         UPDATE users           SET institution_id = '00000000-0000-0000-0000-000000000001' WHERE institution_id = legacy_id;
         UPDATE recipients      SET institution_id = '00000000-0000-0000-0000-000000000001' WHERE institution_id = legacy_id;
@@ -32,8 +32,6 @@ BEGIN
         UPDATE trips           SET institution_id = '00000000-0000-0000-0000-000000000001' WHERE institution_id = legacy_id;
         UPDATE roster_entries  SET institution_id = '00000000-0000-0000-0000-000000000001' WHERE institution_id = legacy_id;
         UPDATE attendances     SET institution_id = '00000000-0000-0000-0000-000000000001' WHERE institution_id = legacy_id;
-        -- All data has been repointed; the legacy row is now orphaned — delete it.
-        DELETE FROM institutions WHERE id = legacy_id;
     END IF;
 END $$;
 -- +goose StatementEnd
