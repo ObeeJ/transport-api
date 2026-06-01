@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'motion/react'
 import { ApiError, api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { fadeUp, stagger, transition } from '@/lib/motion'
+import { useToast } from '@/lib/toast'
 
 type Hub = { id: string; name: string }
 type TripCard = {
@@ -144,11 +145,14 @@ export function RiderHome() {
     return inTransit ?? candidates[0]
   }, [myBookings.data])
 
+  const toast = useToast()
+
   const book = useMutation({
     mutationFn: (tripId: string) => api.post(`/trips/${tripId}/bookings`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['trips'] })
       qc.invalidateQueries({ queryKey: ['ride', 'bookings'] })
+      toast.show('Seat reserved! Check your inbox for trip details.', 'success')
     },
   })
   const cancelBooking = useMutation({
@@ -156,6 +160,7 @@ export function RiderHome() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['trips'] })
       qc.invalidateQueries({ queryKey: ['ride', 'bookings'] })
+      toast.show('Booking cancelled. Your seat has been released.', 'info')
     },
   })
 

@@ -60,7 +60,7 @@ func (h *RatingHandler) MyImpact(c *fiber.Ctx) error {
 	}
 	impact, err := h.svc.DriverImpact(user.ID)
 	if err != nil {
-		return c.Status(404).JSON(fiber.Map{"error": "no_impact_record"})
+		return c.JSON(fiber.Map{"seatsTotal": 0, "tripsTotal": 0, "kmTotal": 0.0})
 	}
 	return c.JSON(impact)
 }

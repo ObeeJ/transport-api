@@ -101,7 +101,7 @@ export function AccountPage() {
           })}
         </div>
         <p className="mt-3 text-[11px] text-[var(--color-stone)] leading-relaxed">
-          Roles unlock automatically. Apply to drive or receive support to add more.
+          Everyone starts as a Giver and Commuter. To drive, go to <span className="font-medium text-[var(--color-ink)]">Drive → Apply to drive</span> and a steward will verify you. To receive support, go to <span className="font-medium text-[var(--color-ink)]">Commute → Support → Apply</span>.
         </p>
       </motion.div>
 

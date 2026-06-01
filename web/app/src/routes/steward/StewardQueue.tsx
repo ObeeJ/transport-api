@@ -18,14 +18,7 @@ type Recipient = {
 
 // Fallback axes used while /steward/workload is loading. The API returns
 // the same shape: queue labels × day labels × intensity matrix.
-const fallbackDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-const fallbackQueueNames = ['Commuter intake', 'Driver onboard', 'SOS alerts', 'Payout auths']
-const fallbackWorkloadMatrix: number[][] = [
-  [0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0],
-]
+const fallbackWorkloadMatrix: number[][] = []
 
 export function StewardQueue() {
   const { user } = useAuth()
@@ -45,8 +38,8 @@ export function StewardQueue() {
     enabled: !!user,
     staleTime: 60 * 1000,
   })
-  const queueNames = workload.data?.queues ?? fallbackQueueNames
-  const days = workload.data?.days ?? fallbackDays
+  const queueNames = workload.data?.queues ?? []
+  const days = workload.data?.days ?? []
   const workloadMatrix = workload.data?.matrix ?? fallbackWorkloadMatrix
 
   return (
@@ -93,156 +86,147 @@ export function StewardQueue() {
           <span className="text-[10px] bg-[var(--color-coral)]/10 text-[var(--color-coral)] px-2 py-0.5 rounded font-mono font-bold tracking-wider">Telemetry</span>
         </div>
 
-        <div className="mt-4 space-y-3">
-          {/* X axis (Days) */}
-          <div className="grid grid-cols-[100px_1fr] gap-3 text-[9px] font-mono text-[var(--color-stone)] text-center">
-            <div className="text-left font-sans font-semibold pl-1.5">Queue Area</div>
-            <div className="grid grid-cols-6 gap-1.5">
-              {days.map((d, idx) => (
-                <div
-                  key={idx}
-                  className={`transition-all duration-150 py-0.5 rounded ${
-                    active?.day === d ? 'text-[var(--color-coral)] font-bold bg-[var(--color-coral)]/5 scale-105' : ''
-                  }`}
-                >
-                  {d}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Queue Rows */}
-          <div className="space-y-2">
-            {queueNames.map((qName, qIdx) => (
-              <div key={qIdx} className="grid grid-cols-[100px_1fr] gap-3 items-center">
-                {/* Row Header (Queue Name) */}
-                <span
-                  className={`text-[10px] font-medium transition-all duration-150 py-1 rounded truncate text-left ${
-                    active && active.queue === qName
-                      ? 'text-[var(--color-coral)] font-bold bg-[var(--color-coral)]/5 pl-1.5'
-                      : 'text-[var(--color-indigo)] pl-1'
-                  }`}
-                >
-                  {qName}
-                </span>
-
-                {/* Daily Pillars */}
-                <div className="grid grid-cols-6 gap-1.5">
-                  {workloadMatrix[qIdx].map((val, cellIdx) => {
-                    const isHovered = activeCell && activeCell.queue === qName && activeCell.day === days[cellIdx];
-                    const isSelected = selectedCell && selectedCell.queue === qName && selectedCell.day === days[cellIdx];
-                    const isActive = isHovered || isSelected;
-
-                    return (
-                      <motion.div
-                        key={cellIdx}
-                        whileHover={{ scale: 1.04, translateY: -2 }}
-                        onClick={() => {
-                          if (selectedCell && selectedCell.queue === qName && selectedCell.day === days[cellIdx]) {
-                            setSelectedCell(null);
-                          } else {
-                            setSelectedCell({ queue: qName, day: days[cellIdx], val });
-                          }
-                        }}
-                        onMouseEnter={() => setActiveCell({ queue: qName, day: days[cellIdx], val })}
-                        onMouseLeave={() => setActiveCell(null)}
-                        className={`h-[72px] flex flex-col justify-between items-center py-2 rounded-lg cursor-pointer border select-none transition-all duration-200 ${
-                          isActive
-                            ? 'border-[var(--color-coral)] ring-2 ring-[var(--color-coral)] ring-offset-1 bg-white shadow-md z-10'
-                            : 'border-[var(--color-hairline)] bg-[var(--color-paper)]/60 hover:bg-white/90 hover:border-[var(--color-stone-soft)] shadow-sm'
-                        } ${isSelected ? 'animate-pulse' : ''}`}
-                      >
-                        {/* Tiny day indicator */}
-                        <span className="text-[8px] font-mono text-[var(--color-stone-soft)] leading-none">
-                          {days[cellIdx]}
-                        </span>
-
-                        {/* Vertical Gauge Bar */}
-                        <div className="w-1.5 h-6 bg-[var(--color-cream-2)]/60 rounded-full overflow-hidden relative">
-                          <div
-                            className={`absolute bottom-0 left-0 w-full rounded-full transition-all duration-300 heat-steward-${val}`}
-                            style={{ height: `${Math.max(val * 25, 8)}%` }}
-                          />
-                        </div>
-
-                        {/* Direct count text */}
-                        <span className="text-[9px] font-mono font-bold text-[var(--color-indigo)] leading-none">
-                          {val === 0 ? 'Clear' : `+${val * 3}`}
-                        </span>
-                      </motion.div>
-                    );
-                  })}
-                </div>
-              </div>
+        {workload.isLoading ? (
+          <div className="mt-4 grid grid-cols-6 gap-1.5">
+            {Array.from({ length: 24 }).map((_, i) => (
+              <div key={i} className="h-[72px] rounded-lg bg-[var(--color-cream-2)] animate-pulse" />
             ))}
           </div>
-        </div>
-
-        {/* Legend */}
-        <div className="mt-4 flex items-center justify-between text-[9px] text-[var(--color-stone)] font-mono">
-          <span>Cleared</span>
-          <div className="flex gap-1.5">
-            <span className="size-2.5 rounded-[2px] heat-steward-0 border border-[var(--color-hairline)]" />
-            <span className="size-2.5 rounded-[2px] heat-steward-1" />
-            <span className="size-2.5 rounded-[2px] heat-steward-2" />
-            <span className="size-2.5 rounded-[2px] heat-steward-3" />
-            <span className="size-2.5 rounded-[2px] heat-steward-4" />
+        ) : queueNames.length === 0 ? (
+          <div className="mt-4 py-6 text-center">
+            <p className="text-[13px] font-medium text-[var(--color-indigo)]">No workload data yet</p>
+            <p className="mt-1 text-[11px] text-[var(--color-stone)]">This map fills once queue activity is recorded.</p>
           </div>
-          <span>Heavy workload</span>
-        </div>
-
-        {/* Dynamic Telemetry Panel */}
-        <div className="card-base p-3.5 mt-4 border border-[var(--color-hairline)] bg-[var(--color-paper)]/50 relative overflow-hidden">
-          <AnimatePresence mode="wait">
-            {active ? (
-              <motion.div
-                key={`${active.queue}-${active.day}`}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
-              >
-                <div className="flex items-center gap-2">
-                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 heat-steward-${active.val} ${active.val === 4 ? 'animate-pulse ring-2 ring-[var(--color-coral)]/30' : ''}`} />
-                  <div>
-                    <span className="text-xs font-semibold text-[var(--color-indigo)]">
-                      {active.queue} on {active.day}
-                    </span>
-                    <p className="text-[10px] text-[var(--color-stone)]">
-                      {active.val === 0 && "Queue fully cleared. No backlog, average wait time 0 mins. Excellent throughput!"}
-                      {active.val === 1 && "Light backlog. Minor pending reviews, average wait time < 5 mins. Normal operations."}
-                      {active.val === 2 && "Moderate workload. Backlog starting to compile, average wait time ~15 mins. Keep processing active claims."}
-                      {active.val === 3 && "Heavy workload queue. Backlog growing, average wait time ~30 mins. Recommending secondary signature prioritization."}
-                      {active.val === 4 && "Critical backlog! Extreme bottleneck detected, average wait time > 1 hr. Immediate action required."}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
-                  <div className="text-right">
-                    <span className="text-[10px] uppercase font-mono tracking-wider text-[var(--color-stone)] block">Backlog Load</span>
-                    <span className="text-xs font-bold text-[var(--color-coral)] font-mono">{active.val === 0 ? 'Clear queue' : `+${active.val * 3} claims`}</span>
-                  </div>
-                  {selectedCell && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedCell(null);
-                      }}
-                      className="text-[10px] text-[var(--color-stone)] hover:text-[var(--color-coral)] font-mono px-2 py-1 rounded bg-[var(--color-cream-2)] border border-[var(--color-hairline)] hover:border-[var(--color-stone-soft)] transition-colors cursor-pointer"
+        ) : (
+          <>
+            <div className="mt-4 space-y-3">
+              {/* X axis (Days) */}
+              <div className="grid grid-cols-[100px_1fr] gap-3 text-[9px] font-mono text-[var(--color-stone)] text-center">
+                <div className="text-left font-sans font-semibold pl-1.5">Queue Area</div>
+                <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${days.length}, 1fr)` }}>
+                  {days.map((d, idx) => (
+                    <div
+                      key={idx}
+                      className={`transition-all duration-150 py-0.5 rounded ${
+                        active?.day === d ? 'text-[var(--color-coral)] font-bold bg-[var(--color-coral)]/5 scale-105' : ''
+                      }`}
                     >
-                      clear ×
-                    </button>
-                  )}
+                      {d}
+                    </div>
+                  ))}
                 </div>
-              </motion.div>
-            ) : (
-              <div className="h-10 flex items-center justify-center">
-                <span className="text-[10px] uppercase text-[var(--color-stone)] tracking-wider">Hover or tap pillars to identify operational backlogs</span>
               </div>
-            )}
-          </AnimatePresence>
-        </div>
+
+              {/* Queue Rows */}
+              <div className="space-y-2">
+                {queueNames.map((qName, qIdx) => (
+                  <div key={qIdx} className="grid grid-cols-[100px_1fr] gap-3 items-center">
+                    <span
+                      className={`text-[10px] font-medium transition-all duration-150 py-1 rounded truncate text-left ${
+                        active && active.queue === qName
+                          ? 'text-[var(--color-coral)] font-bold bg-[var(--color-coral)]/5 pl-1.5'
+                          : 'text-[var(--color-indigo)] pl-1'
+                      }`}
+                    >
+                      {qName}
+                    </span>
+                    <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${days.length}, 1fr)` }}>
+                      {workloadMatrix[qIdx].map((val, cellIdx) => {
+                        const isHovered = activeCell && activeCell.queue === qName && activeCell.day === days[cellIdx];
+                        const isSelected = selectedCell && selectedCell.queue === qName && selectedCell.day === days[cellIdx];
+                        const isActive = isHovered || isSelected;
+                        return (
+                          <motion.div
+                            key={cellIdx}
+                            whileHover={{ scale: 1.04, translateY: -2 }}
+                            onClick={() => {
+                              if (isSelected) setSelectedCell(null)
+                              else setSelectedCell({ queue: qName, day: days[cellIdx], val })
+                            }}
+                            onMouseEnter={() => setActiveCell({ queue: qName, day: days[cellIdx], val })}
+                            onMouseLeave={() => setActiveCell(null)}
+                            className={`h-[72px] flex flex-col justify-between items-center py-2 rounded-lg cursor-pointer border select-none transition-all duration-200 ${
+                              isActive
+                                ? 'border-[var(--color-coral)] ring-2 ring-[var(--color-coral)] ring-offset-1 bg-white shadow-md z-10'
+                                : 'border-[var(--color-hairline)] bg-[var(--color-paper)]/60 hover:bg-white/90 hover:border-[var(--color-stone-soft)] shadow-sm'
+                            } ${isSelected ? 'animate-pulse' : ''}`}
+                          >
+                            <span className="text-[8px] font-mono text-[var(--color-stone-soft)] leading-none">{days[cellIdx]}</span>
+                            <div className="w-1.5 h-6 bg-[var(--color-cream-2)]/60 rounded-full overflow-hidden relative">
+                              <div
+                                className={`absolute bottom-0 left-0 w-full rounded-full transition-all duration-300 heat-steward-${val}`}
+                                style={{ height: `${Math.max(val * 25, 8)}%` }}
+                              />
+                            </div>
+                            <span className="text-[9px] font-mono font-bold text-[var(--color-indigo)] leading-none">
+                              {val === 0 ? 'Clear' : `+${val * 3}`}
+                            </span>
+                          </motion.div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Legend */}
+            <div className="mt-4 flex items-center justify-between text-[9px] text-[var(--color-stone)] font-mono">
+              <span>Cleared</span>
+              <div className="flex gap-1.5">
+                {[0,1,2,3,4].map(v => <span key={v} className={`size-2.5 rounded-[2px] heat-steward-${v} ${v === 0 ? 'border border-[var(--color-hairline)]' : ''}`} />)}
+              </div>
+              <span>Heavy workload</span>
+            </div>
+
+            {/* Dynamic Telemetry Panel */}
+            <div className="card-base p-3.5 mt-4 border border-[var(--color-hairline)] bg-[var(--color-paper)]/50 relative overflow-hidden">
+              <AnimatePresence mode="wait">
+                {active ? (
+                  <motion.div
+                    key={`${active.queue}-${active.day}`}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2.5 h-2.5 rounded-full shrink-0 heat-steward-${active.val} ${active.val === 4 ? 'animate-pulse ring-2 ring-[var(--color-coral)]/30' : ''}`} />
+                      <div>
+                        <span className="text-xs font-semibold text-[var(--color-indigo)]">{active.queue} on {active.day}</span>
+                        <p className="text-[10px] text-[var(--color-stone)]">
+                          {active.val === 0 && 'Queue fully cleared. No backlog, average wait time 0 mins.'}
+                          {active.val === 1 && 'Light backlog. Minor pending reviews, average wait time < 5 mins.'}
+                          {active.val === 2 && 'Moderate workload. Backlog starting to compile, average wait time ~15 mins.'}
+                          {active.val === 3 && 'Heavy workload queue. Backlog growing, average wait time ~30 mins.'}
+                          {active.val === 4 && 'Critical backlog! Extreme bottleneck detected, average wait time > 1 hr.'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                      <div className="text-right">
+                        <span className="text-[10px] uppercase font-mono tracking-wider text-[var(--color-stone)] block">Backlog Load</span>
+                        <span className="text-xs font-bold text-[var(--color-coral)] font-mono">{active.val === 0 ? 'Clear queue' : `+${active.val * 3} claims`}</span>
+                      </div>
+                      {selectedCell && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setSelectedCell(null) }}
+                          className="text-[10px] text-[var(--color-stone)] hover:text-[var(--color-coral)] font-mono px-2 py-1 rounded bg-[var(--color-cream-2)] border border-[var(--color-hairline)] hover:border-[var(--color-stone-soft)] transition-colors cursor-pointer"
+                        >
+                          clear ×
+                        </button>
+                      )}
+                    </div>
+                  </motion.div>
+                ) : (
+                  <div className="h-10 flex items-center justify-center">
+                    <span className="text-[10px] uppercase text-[var(--color-stone)] tracking-wider">Hover or tap pillars to identify operational backlogs</span>
+                  </div>
+                )}
+              </AnimatePresence>
+            </div>
+          </>
+        )}
       </motion.section>
 
       {/* Main queue table */}

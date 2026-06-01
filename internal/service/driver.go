@@ -40,14 +40,15 @@ var hourBuckets = []struct {
 }
 
 // HubOpportunity returns a hubs × hours intensity matrix derived from real
-// booking demand over the trailing 14 days. Each cell is 0-4, normalised
-// against the busiest cell so the heatmap is readable even for low-volume
-// periods. Only the top 4 hubs by total demand are returned (matching the
-// frontend's compact axis); ties broken by hub name.
+// booking demand over the trailing 14 days, alongside a supply matrix of
+// published driver trips. The gap between demand and supply is the real
+// opportunity signal for drivers.
 type HubOpportunity struct {
-	Hubs   []string `json:"hubs"`
-	Hours  []string `json:"hours"`
-	Matrix [][]int  `json:"matrix"`
+	Hubs         []string `json:"hubs"`
+	Hours        []string `json:"hours"`
+	Matrix       [][]int  `json:"matrix"`       // rider demand (0-4)
+	SupplyMatrix [][]int  `json:"supplyMatrix"` // driver supply (0-4)
+	GapMatrix    [][]int  `json:"gapMatrix"`    // demand - supply clamped 0-4
 }
 
 func (s *DriverService) Opportunities() (*HubOpportunity, error) {
@@ -56,7 +57,9 @@ func (s *DriverService) Opportunities() (*HubOpportunity, error) {
 		Hour    int
 		Cnt     int
 	}
-	var rows []row
+
+	// Rider demand — bookings over trailing 14 days.
+	var demandRows []row
 	if err := s.db.Raw(`
 		SELECT h.name AS hub_name, EXTRACT(HOUR FROM t.departure_at)::int AS hour, COUNT(*) AS cnt
 		FROM bookings b
@@ -65,61 +68,112 @@ func (s *DriverService) Opportunities() (*HubOpportunity, error) {
 		WHERE b.status = 'booked'
 		  AND t.departure_at >= NOW() - INTERVAL '14 days'
 		GROUP BY 1, 2
-	`).Scan(&rows).Error; err != nil {
+	`).Scan(&demandRows).Error; err != nil {
 		return nil, err
 	}
 
-	// Aggregate by hub, then bucket hours.
-	hubTotals := map[string]int{}
-	hubMatrix := map[string][]int{}
-	for _, r := range rows {
-		if _, ok := hubMatrix[r.HubName]; !ok {
-			hubMatrix[r.HubName] = make([]int, len(hourBuckets))
+	// Driver supply — published/boarding trips over trailing 14 days.
+	var supplyRows []row
+	if err := s.db.Raw(`
+		SELECT h.name AS hub_name, EXTRACT(HOUR FROM t.departure_at)::int AS hour, COUNT(*) AS cnt
+		FROM trips t
+		JOIN hubs h ON h.id = t.origin_hub_id
+		WHERE t.status IN ('published', 'boarding', 'in_transit', 'completed')
+		  AND t.departure_at >= NOW() - INTERVAL '14 days'
+		GROUP BY 1, 2
+	`).Scan(&supplyRows).Error; err != nil {
+		return nil, err
+	}
+
+	// Aggregate both into hub → bucket maps.
+	hubDemandTotals := map[string]int{}
+	hubDemand := map[string][]int{}
+	for _, r := range demandRows {
+		if _, ok := hubDemand[r.HubName]; !ok {
+			hubDemand[r.HubName] = make([]int, len(hourBuckets))
 		}
-		hubTotals[r.HubName] += r.Cnt
+		hubDemandTotals[r.HubName] += r.Cnt
 		for i, b := range hourBuckets {
 			if r.Hour >= b.Start && r.Hour < b.End {
-				hubMatrix[r.HubName][i] += r.Cnt
+				hubDemand[r.HubName][i] += r.Cnt
 				break
 			}
 		}
 	}
 
-	// Pick top-4 hubs by demand; pad with any-active hubs alphabetically when
-	// there's no booking volume yet so the widget still renders something.
-	hubs := topHubs(hubTotals, 4)
-	if len(hubs) < 4 {
-		hubs = padHubs(s.db, hubs, 4)
-	}
-
-	max := 0
-	for _, h := range hubs {
-		for _, v := range hubMatrix[h] {
-			if v > max {
-				max = v
+	hubSupply := map[string][]int{}
+	for _, r := range supplyRows {
+		if _, ok := hubSupply[r.HubName]; !ok {
+			hubSupply[r.HubName] = make([]int, len(hourBuckets))
+		}
+		for i, b := range hourBuckets {
+			if r.Hour >= b.Start && r.Hour < b.End {
+				hubSupply[r.HubName][i] += r.Cnt
+				break
 			}
 		}
 	}
 
+	hubs := topHubs(hubDemandTotals, 4)
+	if len(hubs) < 4 {
+		hubs = padHubs(s.db, hubs, 4)
+	}
+
+	// Find max across both matrices for normalisation.
+	maxD, maxS := 0, 0
+	for _, h := range hubs {
+		for _, v := range hubDemand[h] {
+			if v > maxD {
+				maxD = v
+			}
+		}
+		for _, v := range hubSupply[h] {
+			if v > maxS {
+				maxS = v
+			}
+		}
+	}
+	if maxD == 0 {
+		maxD = 1
+	}
+	if maxS == 0 {
+		maxS = 1
+	}
+
 	out := &HubOpportunity{
-		Hubs:   hubs,
-		Hours:  make([]string, len(hourBuckets)),
-		Matrix: make([][]int, len(hubs)),
+		Hubs:         hubs,
+		Hours:        make([]string, len(hourBuckets)),
+		Matrix:       make([][]int, len(hubs)),
+		SupplyMatrix: make([][]int, len(hubs)),
+		GapMatrix:    make([][]int, len(hubs)),
 	}
 	for i, b := range hourBuckets {
 		out.Hours[i] = b.Label
 	}
 	for i, h := range hubs {
 		out.Matrix[i] = make([]int, len(hourBuckets))
-		if max == 0 {
-			continue
-		}
+		out.SupplyMatrix[i] = make([]int, len(hourBuckets))
+		out.GapMatrix[i] = make([]int, len(hourBuckets))
 		for j := range hourBuckets {
-			c := 0
-			if row, ok := hubMatrix[h]; ok {
-				c = row[j]
+			d := 0
+			if row, ok := hubDemand[h]; ok {
+				d = row[j]
 			}
-			out.Matrix[i][j] = (c*4 + max/2) / max
+			sup := 0
+			if row, ok := hubSupply[h]; ok {
+				sup = row[j]
+			}
+			out.Matrix[i][j] = (d*4 + maxD/2) / maxD
+			out.SupplyMatrix[i][j] = (sup*4 + maxS/2) / maxS
+			// Gap: how much demand exceeds supply, clamped 0-4.
+			gap := out.Matrix[i][j] - out.SupplyMatrix[i][j]
+			if gap < 0 {
+				gap = 0
+			}
+			if gap > 4 {
+				gap = 4
+			}
+			out.GapMatrix[i][j] = gap
 		}
 	}
 	return out, nil

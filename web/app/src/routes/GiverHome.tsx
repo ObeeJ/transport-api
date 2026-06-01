@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Link } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'motion/react'
@@ -13,6 +13,11 @@ type PoolThisWeek = {
   depositCount: number
   uniqueGivers: number
   hidden: boolean
+}
+
+type MonthlyAttendance = {
+  attendanceRate?: number
+  bucketSuppressed: boolean
 }
 
 type InitializeResponse = {
@@ -56,6 +61,14 @@ export function GiverHome() {
     queryFn: () => api.get<PoolThisWeek>('/pool/this-week'),
   })
 
+  const now = new Date()
+  const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const monthlyReport = useQuery<MonthlyAttendance>({
+    queryKey: ['reports', 'monthly', month],
+    queryFn: () => api.get<MonthlyAttendance>(`/reports/monthly?month=${month}`),
+    staleTime: 5 * 60 * 1000,
+  })
+
   const activity = useQuery<{ weeks: number[][] }>({
     queryKey: ['giver', 'activity'],
     queryFn: () => api.get<{ weeks: number[][] }>('/giver/activity'),
@@ -93,6 +106,12 @@ export function GiverHome() {
   const dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
   const fullDayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
+  // Build week labels counting back from current week
+  const weekLabels = useMemo(() => {
+    const n = donationMatrix.length
+    return Array.from({ length: n }, (_, i) => `Week -${n - 1 - i}` ).map((l, i) => i === donationMatrix.length - 1 ? 'This week' : l)
+  }, [donationMatrix.length])
+
   return (
     <motion.div
       variants={stagger(0.07, 0.04)}
@@ -111,7 +130,12 @@ export function GiverHome() {
           {pool.isLoading ? (
             <span className="text-[40px] font-medium text-[var(--color-stone-soft)]">…</span>
           ) : pool.data?.hidden ? (
-            <span className="text-[22px] font-medium text-[var(--color-stone)]">Hidden until 3 givers contribute</span>
+            <div>
+              <span className="text-[18px] font-medium text-[var(--color-stone)]">Not shown yet</span>
+              <p className="mt-1 text-[11px] text-[var(--color-stone)] leading-relaxed">
+                The total stays hidden until at least 3 people have given this week — so no single person can be identified by the amount. Check back soon.
+              </p>
+            </div>
           ) : (
             <AnimatePresence mode="wait">
               <motion.span
@@ -133,7 +157,18 @@ export function GiverHome() {
         <div className="mt-4 grid grid-cols-3 gap-3">
           <PoolStat value={String(pool.data?.depositCount ?? 0)} label="deposits" />
           <PoolStat value={String(pool.data?.uniqueGivers ?? 0)} label="givers" />
-          <PoolStat value="+24%" label="attendance" tone="moss" />
+          <PoolStat
+            value={
+              monthlyReport.data?.bucketSuppressed
+                ? 'private'
+                : monthlyReport.data?.attendanceRate != null
+                  ? `${Math.round(monthlyReport.data.attendanceRate)}%`
+                  : '…'
+            }
+            label="attendance"
+            tone="moss"
+            suppressed={monthlyReport.data?.bucketSuppressed}
+          />
         </div>
       </motion.section>
 
@@ -167,11 +202,10 @@ export function GiverHome() {
 
           {/* Week Rows */}
           <div className="space-y-2">
-            {[1, 2, 3, 4].map((weekNum, weekIdx) => {
-              const weekLabel = `Week ${weekNum}`;
-              const weekData = donationMatrix[weekIdx];
+            {donationMatrix.map((weekData, weekIdx) => {
+              const weekLabel = weekLabels[weekIdx];
               return (
-                <div key={weekNum} className="grid grid-cols-[60px_1fr] gap-3 items-center">
+                <div key={weekIdx} className="grid grid-cols-[60px_1fr] gap-3 items-center">
                   <span
                     className={`text-[10px] font-medium transition-all duration-150 py-1 rounded truncate text-left ${
                       active && active.weekIdx === weekIdx
@@ -247,7 +281,7 @@ export function GiverHome() {
                   <span className={`w-2.5 h-2.5 rounded-full shrink-0 heat-giver-${active.val} ${active.val === 4 ? 'animate-pulse ring-2 ring-[var(--color-indigo)]/30' : ''}`} />
                   <div>
                     <span className="text-xs font-semibold text-[var(--color-indigo)]">
-                      Week {active.weekIdx + 1}, {fullDayNames[active.dayIdx]}
+                      {weekLabels[active.weekIdx]}, {fullDayNames[active.dayIdx]}
                     </span>
                     <p className="text-[10px] text-[var(--color-stone)]">
                       {active.val === 0 && "Quiet day: no community deposits recorded yet."}
@@ -394,16 +428,28 @@ export function GiverHome() {
   )
 }
 
-function PoolStat({ value, label, tone }: { value: string; label: string; tone?: 'moss' }) {
+function PoolStat({ value, label, tone, suppressed }: { value: string; label: string; tone?: 'moss'; suppressed?: boolean }) {
   return (
     <motion.div variants={fadeUp}>
       <div
-        className="text-[22px] font-medium tracking-tight leading-none"
+        className="text-[22px] font-medium tracking-tight leading-none flex items-center gap-1.5"
         style={{ color: tone === 'moss' ? 'var(--color-moss)' : 'var(--color-indigo)' }}
       >
+        {suppressed ? (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <rect x="4" y="11" width="16" height="10" rx="2" stroke="currentColor" strokeWidth="1.8" fill="rgba(94,114,89,0.10)" />
+            <path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            <circle cx="12" cy="16" r="1.2" fill="currentColor" />
+          </svg>
+        ) : null}
         {value}
       </div>
       <div className="mt-1 text-[10px] text-[var(--color-stone)] uppercase tracking-wider">{label}</div>
+      {suppressed && (
+        <p className="mt-1 text-[10px] text-[var(--color-stone)] leading-relaxed normal-case tracking-normal">
+          Hidden to protect privacy — the group is too small to show safely this month.
+        </p>
+      )}
     </motion.div>
   )
 }

@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, api } from '@/lib/api'
+import { useToast } from '@/lib/toast'
 
 type NoteView = { id: string; body: string; createdAt: string }
 
 export function NotesFeed() {
   const qc = useQueryClient()
+  const toast = useToast()
   const feed = useQuery<{ items: NoteView[] }>({
     queryKey: ['notes'],
     queryFn: () => api.get('/notes'),
@@ -20,6 +22,7 @@ export function NotesFeed() {
       setBody('')
       setError(null)
       qc.invalidateQueries({ queryKey: ['notes'] })
+      toast.show('Your note has been sent anonymously. Someone will read it.', 'success')
     },
     onError: (err) => {
       setError(err instanceof ApiError ? err.message : 'Could not send.')

@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'motion/react'
 import { ApiError, api } from '@/lib/api'
 import { fadeUp, stagger, transition } from '@/lib/motion'
+import { useToast } from '@/lib/toast'
 
 type Recipient = {
   id: string
@@ -13,6 +14,7 @@ type Recipient = {
 
 export function RecipientApply() {
   const navigate = useNavigate()
+  const toast = useToast()
 
   const roster = useQuery<{ verified: boolean }>({
     queryKey: ['roster', 'me'],
@@ -41,6 +43,7 @@ export function RecipientApply() {
         weeklyCostKobo: cost * 100,
         situation,
       })
+      toast.show('Application sent. Two stewards will review it — you\'ll hear back within 48 hours.', 'success')
       navigate('/support/status', { replace: true })
     } catch (err) {
       if (err instanceof ApiError && err.code === 'steward_cannot_receive') {

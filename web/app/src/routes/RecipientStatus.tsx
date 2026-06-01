@@ -245,7 +245,7 @@ function statusBody(status: Recipient['status']): string {
     case 'approved':
       return "You're set. Funds will reach you on the next weekly cycle, tied to your attendance."
     case 'declined':
-      return "Stewards weren't able to approve this round. You can write to us at akin@school.edu.ng — circumstances change."
+      return "Stewards weren't able to approve this round. You can submit an appeal below — a different steward pair will take a fresh look."
     case 'pending':
     default:
       return "Two stewards will read your note and decide together. We aim to respond within 48 hours."
