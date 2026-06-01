@@ -48,8 +48,7 @@ func main() {
 		os.Exit(1)
 	}
 	if err := db.RunGooseUp(gdb); err != nil {
-		slog.Error("goose up", "err", err)
-		os.Exit(1)
+		slog.Warn("goose up failed — continuing", "err", err)
 	}
 
 	// Redis + WebSocket hub (optional — degrades gracefully if Redis is down)
