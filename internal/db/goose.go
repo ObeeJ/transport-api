@@ -25,9 +25,6 @@ func RunGooseUp(gdb *gorm.DB) error {
 	if err != nil {
 		return fmt.Errorf("get sql.DB: %w", err)
 	}
-	// Quiet logger — slog will still see the version-applied lines below.
-	goose.SetLogger(goose.NopLogger())
-
 	before, _ := goose.GetDBVersion(sqlDB)
 	if err := goose.Up(sqlDB, "migrations"); err != nil {
 		return fmt.Errorf("goose up: %w", err)

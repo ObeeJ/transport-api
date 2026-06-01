@@ -39,6 +39,7 @@ func AutoMigrate(gdb *gorm.DB) error {
 		&models.SOSAlert{},
 		&models.TripGPSPoint{},
 		&models.RecipientAppeal{},
+		&models.Strike{},
 	); err != nil {
 		return fmt.Errorf("auto-migrate: %w", err)
 	}
