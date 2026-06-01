@@ -18,6 +18,20 @@ var ErrGPSNotAllowed = errors.New("gps_not_allowed")
 // from the declared hub→destination straight line, flag for review.
 const plausibilityMaxKm = 15.0
 
+// journeyMinKm — minimum distance the vehicle must travel from its origin hub
+// for a completed trip to count as a real journey. Below this, a "boarded"
+// attendance mark is suspect (the vehicle effectively never left).
+const journeyMinKm = 1.0
+
+// defaultGPS is the boot-wired GPS service used by RideService.CompleteTrip to
+// corroborate that a finished trip actually happened. Package singleton (like
+// defaultIntegrity) to avoid threading GPSService through RideService's
+// constructor. Nil-safe.
+var defaultGPS *GPSService
+
+// SetDefaultGPS wires the package-level GPS service. Call once at startup.
+func SetDefaultGPS(s *GPSService) { defaultGPS = s }
+
 type GPSService struct {
 	repo     *repository.GPSRepo
 	rideRepo *repository.RideRepo
@@ -98,6 +112,49 @@ func (s *GPSService) CheckPlausibility(tripID uuid.UUID, hubLat, hubLng float64)
 			"threshold":      plausibilityMaxKm,
 		})
 	}
+}
+
+// withinGeofenceKm reports whether (lat,lng) lies within radiusKm of a centre
+// point. The geofence primitive for arrival/presence checks.
+func withinGeofenceKm(lat, lng, centerLat, centerLng, radiusKm float64) bool {
+	return haversineKm(lat, lng, centerLat, centerLng) <= radiusKm
+}
+
+// CorroborateTripJourney records a privacy-preserving check that a completed
+// trip actually happened. It inspects ONLY the driver's GPS track (riders are
+// never tracked) and stores a single boolean outcome — whether the vehicle
+// travelled beyond journeyMinKm from its origin hub. A "boarded" attendance
+// mark on a trip whose vehicle never moved is exactly the abuse signal stewards
+// want to see. This is a soft corroboration: it never blocks a payout, it only
+// writes an audit signal alongside the existing driver-marked attendance.
+func (s *GPSService) CorroborateTripJourney(tripID uuid.UUID) {
+	if s == nil {
+		return
+	}
+	trip, err := s.rideRepo.FindTrip(tripID)
+	if err != nil {
+		return
+	}
+	hub, err := s.rideRepo.FindHub(trip.OriginHubID)
+	if err != nil {
+		return
+	}
+	points, err := s.repo.ListForTrip(tripID)
+	if err != nil {
+		return
+	}
+	maxKm := 0.0
+	for _, pt := range points {
+		if d := haversineKm(pt.Lat, pt.Lng, hub.Lat, hub.Lng); d > maxKm {
+			maxKm = d
+		}
+	}
+	confirmed := len(points) >= 2 && maxKm >= journeyMinKm
+	audit.Record(s.db, "system", "trip_journey_corroborated", tripID.String(), map[string]any{
+		"confirmed":       confirmed,
+		"maxKmFromOrigin": maxKm,
+		"points":          len(points),
+	})
 }
 
 // haversineKm returns the great-circle distance in km between two lat/lng points.

@@ -79,7 +79,13 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       csrfToken = null
       csrfBootstrap = null
     }
-    const message = body?.detail ?? body?.error ?? `Request failed (${res.status})`
+    // Translate known machine codes into human, actionable copy so any screen
+    // that surfaces err.message reads well without bespoke handling.
+    const friendly: Record<string, string> = {
+      email_not_verified:
+        'Verify your email to do this. Open the link we emailed you, or resend it from Account → Verify email.',
+    }
+    const message = friendly[code] ?? body?.detail ?? body?.error ?? `Request failed (${res.status})`
     throw new ApiError(res.status, message, code)
   }
 

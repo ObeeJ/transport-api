@@ -26,6 +26,7 @@ export function PaystackCallback() {
 
   useEffect(() => {
     if (!reference) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setError('Missing reference. Open this page from the Paystack redirect.')
       return
     }

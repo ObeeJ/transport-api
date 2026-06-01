@@ -38,6 +38,7 @@ func (b *RecipientBankAccount) BeforeCreate(_ *gorm.DB) error {
 //   failed | reversed — Paystack told us so
 type Payout struct {
 	ID                   uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	InstitutionID        uuid.UUID  `gorm:"type:uuid;index;not null;default:'00000000-0000-0000-0000-000000000001'" json:"-"`
 	BatchID              *uuid.UUID `gorm:"type:uuid;index" json:"batchId,omitempty"`
 	RecipientID          uuid.UUID  `gorm:"type:uuid;index;not null" json:"recipientId"`
 	AmountKobo         int64      `gorm:"not null" json:"amountKobo"`

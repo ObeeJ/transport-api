@@ -28,6 +28,11 @@ type TransparencyReport struct {
 
 	// Attendance + retention
 	AttendanceRate   *float64 `json:"attendanceRate,omitempty"` // nil if bucket < 10
+	// VerifiedAttendances — confirmed-present attendances in the period. This is
+	// the giver-facing "your money is working" figure: support is only released
+	// to recipients who are verified present, so this number is the human
+	// outcome of the funds disbursed above.
+	VerifiedAttendances int64  `json:"verifiedAttendances"`
 	RetentionNote    string   `json:"retentionNote"`
 
 	// Privacy
@@ -108,6 +113,9 @@ func (s *ReportService) Generate(forDate time.Time) (*TransparencyReport, error)
 		rate, err := s.attendance.AttendanceRate(start, end)
 		if err == nil {
 			report.AttendanceRate = &rate
+		}
+		if n, err := s.attendance.AttendedCount(start, end); err == nil {
+			report.VerifiedAttendances = n
 		}
 	} else {
 		report.BucketSuppressed = true

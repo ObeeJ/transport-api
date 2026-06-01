@@ -33,6 +33,7 @@ var (
 	ErrOTPInvalid        = errors.New("otp_invalid")
 	ErrNotSteward        = errors.New("not_steward")
 	ErrPrivacyRequired   = errors.New("privacy_required")
+	ErrOrgNotFound       = errors.New("org_not_found")
 )
 
 // PrivacyVersion is the current Privacy Promise version. Bump this string
@@ -41,15 +42,16 @@ var (
 const PrivacyVersion = "2026-05-22"
 
 type AuthService struct {
-	users    *repository.UserRepo
-	sessions *repository.SessionRepo
-	cfg      *config.Config
-	mailer   *email.Sender
-	db       *gorm.DB
+	users        *repository.UserRepo
+	sessions     *repository.SessionRepo
+	institutions *repository.InstitutionRepo
+	cfg          *config.Config
+	mailer       *email.Sender
+	db           *gorm.DB
 }
 
-func NewAuthService(users *repository.UserRepo, sessions *repository.SessionRepo, cfg *config.Config, mailer *email.Sender, db *gorm.DB) *AuthService {
-	return &AuthService{users: users, sessions: sessions, cfg: cfg, mailer: mailer, db: db}
+func NewAuthService(users *repository.UserRepo, sessions *repository.SessionRepo, institutions *repository.InstitutionRepo, cfg *config.Config, mailer *email.Sender, db *gorm.DB) *AuthService {
+	return &AuthService{users: users, sessions: sessions, institutions: institutions, cfg: cfg, mailer: mailer, db: db}
 }
 
 type SignupInput struct {
@@ -59,6 +61,10 @@ type SignupInput struct {
 	Phone            string
 	Password         string
 	AcceptedPrivacy  bool
+	// OrgSlug pins the new account to an institution (church/school/workplace).
+	// Resolved from the signup URL (subdomain or ?org=slug). Empty → the default
+	// institution, preserving single-tenant behaviour.
+	OrgSlug          string
 }
 
 type SessionToken struct {
@@ -89,6 +95,17 @@ func (s *AuthService) Signup(input SignupInput) (*SessionToken, error) {
 		return nil, ErrEmailTaken
 	}
 
+	// Resolve which institution this account belongs to. Unknown/empty slug
+	// falls back to the default institution so single-tenant signup is unchanged.
+	institutionID := models.DefaultInstitutionID
+	if input.OrgSlug != "" && s.institutions != nil {
+		if inst, err := s.institutions.FindBySlug(input.OrgSlug); err == nil {
+			institutionID = inst.ID
+		} else {
+			return nil, ErrOrgNotFound
+		}
+	}
+
 	hash, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, err
@@ -96,6 +113,7 @@ func (s *AuthService) Signup(input SignupInput) (*SessionToken, error) {
 
 	now := time.Now()
 	user := &models.User{
+		InstitutionID:     institutionID,
 		Email:             input.Email,
 		FirstName:         input.FirstName,
 		LastName:          input.LastName,

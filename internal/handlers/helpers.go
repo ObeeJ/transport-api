@@ -18,6 +18,9 @@ func setSessionCookie(c *fiber.Ctx, cfg *config.Config, token string, expires ti
 	if prod {
 		sameSite = "None"
 	}
+	if cfg.CookieSameSite != "" {
+		sameSite = cfg.CookieSameSite
+	}
 	// We compute Max-Age from Expires rather than using the Expires
 	// attribute directly — modern browsers prefer Max-Age and our cookie
 	// helper doesn't render absolute dates. For our session TTL (hours
@@ -26,15 +29,19 @@ func setSessionCookie(c *fiber.Ctx, cfg *config.Config, token string, expires ti
 	if maxAge < 0 {
 		maxAge = 0
 	}
+	// CHIPS only applies to cross-site cookies. When the session is same-site
+	// (SameSite != "None") it's first-party, so Partitioned is unnecessary.
+	partitioned := prod && sameSite == "None"
 	middleware.SetCookie(c, middleware.CookieOpts{
 		Name:        cfg.SessionCookieName,
 		Value:       token,
 		Path:        "/",
+		Domain:      cfg.CookieDomain,
 		MaxAge:      maxAge,
 		SameSite:    sameSite,
 		Secure:      prod,
 		HTTPOnly:    true,
-		Partitioned: prod, // CHIPS — required for cross-site cookie under Firefox TCP + Chrome 3PCD.
+		Partitioned: partitioned,
 	})
 }
 

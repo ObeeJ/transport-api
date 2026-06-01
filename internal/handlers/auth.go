@@ -25,6 +25,7 @@ func (h *AuthHandler) Signup(c *fiber.Ctx) error {
 		Phone           string `json:"phone"`
 		Password        string `json:"password"`
 		AcceptedPrivacy bool   `json:"acceptedPrivacy"`
+		Org             string `json:"org"`
 	}
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": "invalid_body"})
@@ -56,6 +57,12 @@ func (h *AuthHandler) Signup(c *fiber.Ctx) error {
 		return c.Status(400).JSON(fiber.Map{"error": "password_too_long"})
 	}
 
+	// Org slug is optional; when present it pins the account to an institution.
+	// Sanitize as a short slug-safe token (empty stays empty → default org).
+	org, err := sanitize.Optional(req.Org, 64)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "org_invalid"})
+	}
 	st, err := h.svc.Signup(service.SignupInput{
 		Email:           email,
 		FirstName:       firstName,
@@ -63,6 +70,7 @@ func (h *AuthHandler) Signup(c *fiber.Ctx) error {
 		Phone:           phone,
 		Password:        req.Password,
 		AcceptedPrivacy: req.AcceptedPrivacy,
+		OrgSlug:         org,
 	})
 	if err != nil {
 		return fail(c, err, "signup_failed")

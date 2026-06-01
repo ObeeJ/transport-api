@@ -18,9 +18,15 @@ export function useRoles() {
 
   useEffect(() => {
     if (status === 'loading') return
-    if (!user) { setRoles(['giver', 'commuter']); return }
+    const defaultRoles: Role[] = ['giver', 'commuter']
+    if (!user) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setRoles(defaultRoles)
+      return
+    }
     // Return cache if same user
     if (cachedUserId === user.id && cachedRoles) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setRoles(cachedRoles)
       return
     }
@@ -36,6 +42,8 @@ export function useRoles() {
       cachedUserId = user.id
       setRoles(r)
     })
+  // user object identity changes on every render; key on id + status only
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, status])
 
   return roles

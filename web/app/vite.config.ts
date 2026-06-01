@@ -59,5 +59,15 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
+    // Mirror the production topology locally: set VITE_API_URL="/api" and the
+    // app talks to the API same-origin, with Vite proxying /api to the Go
+    // server. Override the target with VITE_DEV_API_TARGET if it isn't on :8080.
+    proxy: {
+      '/api': {
+        target: process.env.VITE_DEV_API_TARGET ?? 'http://localhost:8080',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/api/, ''),
+      },
+    },
   },
 })

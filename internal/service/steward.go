@@ -31,8 +31,9 @@ func NewStewardService(repo *repository.StewardRepo, recipients *repository.Reci
 	return &StewardService{repo: repo, recipients: recipients, notify: notify, db: db}
 }
 
-func (s *StewardService) Queue() ([]models.Recipient, error) {
-	return s.recipients.ListPending()
+// Queue returns the pending-recipient review queue for one institution.
+func (s *StewardService) Queue(institutionID uuid.UUID) ([]models.Recipient, error) {
+	return s.recipients.ListPending(institutionID)
 }
 
 // Workload returns a 4 × 6 intensity matrix (0-4) of pending items across the

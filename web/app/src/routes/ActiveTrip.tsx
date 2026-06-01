@@ -356,6 +356,7 @@ function SOSButton({ tripId }: { tripId: string }) {
     })
   }
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => () => stop(), [])
 
   return (

@@ -72,10 +72,11 @@ func (e *EncouragementNote) BeforeCreate(_ *gorm.DB) error {
 // Alerts stewards immediately. Records trip state at time of trigger.
 // Status: open | acknowledged | resolved
 type SOSAlert struct {
-	ID           uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
-	TripID       uuid.UUID  `gorm:"type:uuid;index;not null" json:"tripId"`
-	UserID       uuid.UUID  `gorm:"type:uuid;index;not null" json:"-"`
-	Status       string     `gorm:"not null;default:open;index" json:"status"` // open | acknowledged | resolved
+	ID            uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	InstitutionID uuid.UUID  `gorm:"type:uuid;index;not null;default:'00000000-0000-0000-0000-000000000001'" json:"-"`
+	TripID        uuid.UUID  `gorm:"type:uuid;index;not null" json:"tripId"`
+	UserID        uuid.UUID  `gorm:"type:uuid;index;not null" json:"-"`
+	Status        string     `gorm:"not null;default:open;index" json:"status"` // open | acknowledged | resolved
 	Lat          float64    `gorm:"" json:"lat,omitempty"`
 	Lng          float64    `gorm:"" json:"lng,omitempty"`
 	Note         string     `gorm:"type:text" json:"note,omitempty"`
@@ -120,9 +121,10 @@ func (g *TripGPSPoint) BeforeDelete(_ *gorm.DB) error { return ErrAuditImmutable
 // Must be reviewed by a different steward pair than the one who decided.
 // Status: open | under_review | upheld | dismissed
 type RecipientAppeal struct {
-	ID          uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
-	RecipientID uuid.UUID  `gorm:"type:uuid;index;not null" json:"recipientId"`
-	Reason      string     `gorm:"type:text;not null" json:"reason"`
+	ID            uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	InstitutionID uuid.UUID  `gorm:"type:uuid;index;not null;default:'00000000-0000-0000-0000-000000000001'" json:"-"`
+	RecipientID   uuid.UUID  `gorm:"type:uuid;index;not null" json:"recipientId"`
+	Reason        string     `gorm:"type:text;not null" json:"reason"`
 	Status      string     `gorm:"not null;default:open;index" json:"status"`
 	ReviewedBy  *uuid.UUID `gorm:"type:uuid;index" json:"-"`
 	ReviewNote  string     `gorm:"type:text" json:"reviewNote,omitempty"`

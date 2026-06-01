@@ -16,6 +16,7 @@ type Report = {
   uniqueDrivers: number
   uniqueCommuters: number
   attendanceRate?: number
+  verifiedAttendances: number
   retentionNote?: string
   bucketSuppressed: boolean
 }
@@ -131,12 +132,18 @@ export function TransparencyReport() {
                 </div>
               </div>
             ) : r.attendanceRate != null ? (
-              <div className="flex items-baseline gap-3">
-                <span className="text-[36px] font-medium tracking-tight text-[var(--color-moss)]">
-                  {r.attendanceRate.toFixed(0)}%
-                </span>
-                <span className="text-[12px] text-[var(--color-stone)]">of recipients attended class this period</span>
-              </div>
+              <>
+                <div className="flex items-baseline gap-3">
+                  <span className="text-[36px] font-medium tracking-tight text-[var(--color-moss)]">
+                    {r.attendanceRate.toFixed(0)}%
+                  </span>
+                  <span className="text-[12px] text-[var(--color-stone)]">of recipients attended class this period</span>
+                </div>
+                <p className="mt-3 text-[12px] text-[var(--color-stone)] leading-relaxed">
+                  That's <span className="font-medium text-[var(--color-indigo)]">{r.verifiedAttendances.toLocaleString('en-NG')} verified attendances</span>.
+                  Support is only released to people confirmed present — so this is giving, turned into someone in the room.
+                </p>
+              </>
             ) : (
               <p className="text-[12px] text-[var(--color-stone)]">No attendance data for this period.</p>
             )}

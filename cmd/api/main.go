@@ -87,6 +87,7 @@ func main() {
 	// --- Repositories ---
 	userRepo := repository.NewUserRepo(gdb)
 	sessionRepo := repository.NewSessionRepo(gdb)
+	institutionRepo := repository.NewInstitutionRepo(gdb)
 	depositRepo := repository.NewDepositRepo(gdb)
 	recipientRepo := repository.NewRecipientRepo(gdb)
 	stewardRepo := repository.NewStewardRepo(gdb)
@@ -103,11 +104,12 @@ func main() {
 	sosRepo := repository.NewSOSRepo(gdb)
 	gpsRepo := repository.NewGPSRepo(gdb)
 	appealRepo := repository.NewAppealRepo(gdb)
+	strikeRepo := repository.NewStrikeRepo(gdb)
 
 	// --- Services ---
 	notifySvc := service.NewNotificationService(notifyRepo)
 	walletSvc := service.NewWalletService(walletRepo, notifySvc, gdb)
-	authSvc := service.NewAuthService(userRepo, sessionRepo, cfg, mailer, gdb)
+	authSvc := service.NewAuthService(userRepo, sessionRepo, institutionRepo, cfg, mailer, gdb)
 	emailVerifySvc := service.NewEmailVerifyService(userRepo, notifySvc, mailer, cfg.APIBaseURL, gdb)
 	depositSvc := service.NewDepositService(depositRepo, recipientRepo, paymentProvider, cfg, notifySvc, gdb)
 	poolSvc := service.NewPoolService(depositRepo)
@@ -122,7 +124,12 @@ func main() {
 	noteSvc := service.NewNoteService(noteRepo)
 	sosSvc := service.NewSOSService(sosRepo, rideRepo, notifySvc, gdb)
 	gpsSvc := service.NewGPSService(gpsRepo, rideRepo, gdb)
+	// Wire the package-level GPS service for trip-completion corroboration.
+	service.SetDefaultGPS(gpsSvc)
 	appealSvc := service.NewAppealService(appealRepo, recipientRepo, stewardRepo, notifySvc, gdb)
+	integritySvc := service.NewIntegrityService(strikeRepo, gdb)
+	// Wire the package-level integrity gate used by booking + payout suspension.
+	service.SetDefaultIntegrity(integritySvc)
 	reportSvc := service.NewReportService(depositRepo, payoutRepo, recipientRepo, rideRepo, attendanceRepo, ratingRepo, impactRepo)
 
 	// --- Handlers ---
@@ -147,6 +154,7 @@ func main() {
 	sosH := handlers.NewSOSHandler(sosSvc)
 	gpsH := handlers.NewGPSHandler(gpsSvc)
 	appealH := handlers.NewAppealHandler(appealSvc)
+	strikeH := handlers.NewStrikeHandler(integritySvc)
 	reportH := handlers.NewReportHandler(reportSvc)
 	wsH := handlers.NewWSHandler(seatHub)
 
@@ -169,7 +177,7 @@ func main() {
 	app.Use(middleware.Logger())
 	app.Use(middleware.SecurityHeaders(prod))
 	app.Use(middleware.CORS(cfg.CORSAllowedOrigin))
-	app.Use(middleware.CSRFCookie(prod))
+	app.Use(middleware.CSRFCookie(prod, cfg.CookieDomain, cfg.CookieSameSite))
 	app.Use(middleware.CSRF())
 
 	// --- Health (mounted before CSRF check so probes don't need a token) ---
@@ -199,6 +207,10 @@ func main() {
 	paymentLimit := middleware.NewLimiter(10, time.Minute, nil, "too_many_requests").Middleware()
 
 	authed := middleware.RequireAuth(gdb, cfg.SessionCookieName)
+	// Email-verification gate: unverified users can still browse (GET/HEAD pass
+	// straight through) but can't perform write actions until they verify. SOS
+	// is allowlisted so the emergency button always works.
+	verifiedWrites := middleware.RequireVerifiedEmailForWrites("/sos")
 
 	// Auth (rate-limited — CSRF is applied globally above)
 	app.Post("/auth/signup", authLimit, authH.Signup)
@@ -221,21 +233,21 @@ func main() {
 	app.Get("/roster/me", authed, rosterH.Me)
 
 	// Giver — payment initiation is rate-limited and CSRF-protected
-	app.Post("/giver/deposits/initialize", authed, paymentLimit, giverH.InitializeDeposit)
+	app.Post("/giver/deposits/initialize", authed, verifiedWrites, paymentLimit, giverH.InitializeDeposit)
 	app.Get("/giver/deposits/:reference", authed, giverH.GetDeposit)
 	app.Get("/giver/activity", authed, giverH.Activity)
 
 	// Encouragement notes
-	app.Post("/notes", authed, noteH.Submit)
+	app.Post("/notes", authed, verifiedWrites, noteH.Submit)
 	app.Get("/notes", authed, noteH.Feed)
 
 	// Recipients
-	app.Post("/recipients/apply", authed, recipientH.Apply)
+	app.Post("/recipients/apply", authed, verifiedWrites, recipientH.Apply)
 	app.Get("/recipients/me", authed, recipientH.Me)
 	app.Get("/recipients/me/bank", authed, recipientH.GetBank)
 	app.Post("/recipients/me/bank/resolve", authed, recipientH.ResolveBank)
-	app.Post("/recipients/me/bank", authed, recipientH.SaveBank)
-	app.Post("/recipients/me/appeal", authed, appealH.Submit)
+	app.Post("/recipients/me/bank", authed, verifiedWrites, recipientH.SaveBank)
+	app.Post("/recipients/me/appeal", authed, verifiedWrites, appealH.Submit)
 
 	// Banks
 	app.Get("/banks", authed, banksH.List)
@@ -251,10 +263,10 @@ func main() {
 	app.Post("/wallet/debit", authed, walletH.Debit)
 	// Recipient self-service withdrawal: wallet → bank. Rate-limited like
 	// other payment-initiating endpoints; auth + CSRF apply via middleware.
-	app.Post("/wallet/withdraw", authed, paymentLimit, payoutH.Withdraw)
+	app.Post("/wallet/withdraw", authed, verifiedWrites, paymentLimit, payoutH.Withdraw)
 
 	// Driver
-	app.Post("/driver/apply", authed, driverH.Apply)
+	app.Post("/driver/apply", authed, verifiedWrites, driverH.Apply)
 	app.Get("/driver/me", authed, driverH.Me)
 	app.Get("/driver/opportunities", authed, driverH.Opportunities)
 	app.Get("/driver/impact", authed, ratingH.MyImpact)
@@ -267,12 +279,12 @@ func main() {
 	app.Get("/hubs", authed, ridesH.ListHubs)
 	app.Get("/trips/demand", authed, ridesH.TripDemand)
 	app.Get("/trips", authed, ridesH.ListTrips)
-	app.Post("/trips", authed, ridesH.PublishTrip)
+	app.Post("/trips", authed, verifiedWrites, ridesH.PublishTrip)
 	app.Get("/trips/:id", authed, ridesH.GetTrip)
 	app.Post("/trips/:id/start", authed, ridesH.StartTrip)
 	app.Post("/trips/:id/complete", authed, ridesH.CompleteTrip)
 	app.Post("/trips/:id/cancel", authed, ridesH.CancelTrip)
-	app.Post("/trips/:id/bookings", authed, ridesH.BookSeat)
+	app.Post("/trips/:id/bookings", authed, verifiedWrites, ridesH.BookSeat)
 	app.Delete("/trips/:id/bookings/me", authed, ridesH.CancelBooking)
 	app.Post("/trips/:id/attendance", authed, driverH.MarkAttendance)
 	app.Post("/trips/:id/ratings", authed, ratingH.Submit)
@@ -321,6 +333,8 @@ func main() {
 	steward.Get("/appeals", appealH.Queue)
 	steward.Post("/appeals/:id/review", appealH.Review)
 	steward.Post("/appeals/:id/decide", appealH.Decide)
+	steward.Get("/strikes", strikeH.List)
+	steward.Post("/strikes/:id/clear", strikeH.Clear)
 
 	// Webhooks (no auth, signature-verified)
 	// Webhooks — no auth (signature-verified), no CSRF (Paystack can't carry our cookie),
