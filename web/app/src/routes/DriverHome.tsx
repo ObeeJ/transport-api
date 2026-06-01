@@ -412,7 +412,7 @@ export function DriverHome() {
         )}
       </AnimatePresence>
 
-      <Impact />
+      <Impact enabled={isApproved} />
       <PastTrips trips={myTrips.data?.items ?? []} />
     </motion.div>
     </>
@@ -728,11 +728,12 @@ function ActiveDriverTrip({ trip }: { trip: TripCard }) {
   )
 }
 
-function Impact() {
+function Impact({ enabled }: { enabled: boolean }) {
   const q = useQuery<{ seatsTotal: number; tripsTotal: number; kmTotal: number }>({
     queryKey: ['driver', 'impact'],
     queryFn: () => api.get('/driver/impact'),
     staleTime: 60 * 1000,
+    enabled,
   })
   if (!q.data) return null
   const { seatsTotal, tripsTotal } = q.data
