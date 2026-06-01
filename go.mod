@@ -1,6 +1,6 @@
 module github.com/obeej/akin
 
-go 1.25.7
+go 1.24
 
 require (
 	github.com/gofiber/fiber/v2 v2.52.13
