@@ -9,7 +9,7 @@ import { useAuth } from '@/lib/auth'
 import { useDriverGPS } from '@/lib/useDriverGPS'
 import { useToast } from '@/lib/toast'
 
-type Hub = { id: string; name: string }
+type Hub = { id: string; name: string; lat?: number; lng?: number; distanceKm?: number }
 type TripCard = {
   id: string
   driverId: string
@@ -41,9 +41,23 @@ export function DriverHome() {
   const [selectedCell, setSelectedCell] = useState<{ hub: string; hour: string; val: number } | null>(null)
   const active = activeCell || selectedCell
 
-  const hubs = useQuery<{ items: Hub[] }>({
-    queryKey: ['hubs'],
-    queryFn: () => api.get('/hubs'),
+  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null)
+  useEffect(() => {
+    if (!navigator.geolocation) return
+    navigator.geolocation.getCurrentPosition(
+      (pos) => setUserCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => {},
+      { timeout: 5000, maximumAge: 5 * 60 * 1000 },
+    )
+  }, [])
+
+  const hubs = useQuery<{ items: Hub[]; frequentIds: string[] }>({
+    queryKey: ['hubs', userCoords?.lat, userCoords?.lng],
+    queryFn: () => {
+      const params = new URLSearchParams()
+      if (userCoords) { params.set('lat', String(userCoords.lat)); params.set('lng', String(userCoords.lng)) }
+      return api.get(`/hubs?${params}`)
+    },
     staleTime: 10 * 60 * 1000,
   })
   const myTrips = useQuery<{ items: TripCard[] }>({
@@ -484,7 +498,11 @@ function PublishTripForm({ hubs, onCancel, onDone }: { hubs: Hub[]; onCancel: ()
             onChange={(e) => setOriginHubId(e.target.value)}
             className="mt-1 w-full bg-[var(--color-paper)] border border-[var(--color-hairline)] rounded-[12px] px-3 h-11 text-sm focus:outline-none focus:border-[var(--color-clay)] focus:ring-1 focus:ring-[var(--color-clay)] transition-all duration-200 shadow-sm"
           >
-            {hubs.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+            {hubs.map((h) => (
+              <option key={h.id} value={h.id}>
+                {h.name}{h.distanceKm != null ? ` · ${h.distanceKm < 1 ? Math.round(h.distanceKm * 1000) + 'm' : h.distanceKm.toFixed(1) + 'km'}` : ''}
+              </option>
+            ))}
           </select>
         </div>
         <div>

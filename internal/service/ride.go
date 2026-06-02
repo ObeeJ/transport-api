@@ -47,8 +47,15 @@ func NewRideService(repo *repository.RideRepo, drivers *repository.DriverRepo, u
 	return &RideService{repo: repo, drivers: drivers, users: users, hub: hub, db: db}
 }
 
-func (s *RideService) ListHubs() ([]models.Hub, error) {
+func (s *RideService) ListHubs(activeOnly bool) ([]models.Hub, error) {
+	if activeOnly {
+		return s.repo.ListHubsWithActiveTrips()
+	}
 	return s.repo.ListActiveHubs()
+}
+
+func (s *RideService) FrequentHubIDs(userID uuid.UUID, limit int) ([]string, error) {
+	return s.repo.FrequentHubIDsByRider(userID, limit)
 }
 
 func (s *RideService) TripDemand() ([]repository.DemandRow, error) {

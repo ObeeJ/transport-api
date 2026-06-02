@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { Link } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'motion/react'
@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/auth'
 import { fadeUp, stagger, transition } from '@/lib/motion'
 import { useToast } from '@/lib/toast'
 
-type Hub = { id: string; name: string }
+type Hub = { id: string; name: string; lat?: number; lng?: number; distanceKm?: number }
 type TripCard = {
   id: string
   driverId: string
@@ -80,6 +80,18 @@ export function RiderHome() {
   const qc = useQueryClient()
   const { user } = useAuth()
   const [hubFilter, setHubFilter] = useState<string>('')
+  const [hubSearch, setHubSearch] = useState<string>('')
+  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null)
+
+  // Silently request GPS on mount — no prompt blocking the page
+  useEffect(() => {
+    if (!navigator.geolocation) return
+    navigator.geolocation.getCurrentPosition(
+      (pos) => setUserCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => {}, // denied or unavailable — fall back to history + alpha
+      { timeout: 5000, maximumAge: 5 * 60 * 1000 },
+    )
+  }, [])
   const [activeCell, setActiveCell] = useState<{ hub: string; hour: number; val: number; row: DemandRow | null } | null>(null)
   const [selectedCell, setSelectedCell] = useState<{ hub: string; hour: number; val: number; row: DemandRow | null } | null>(null)
   const active = activeCell || selectedCell
@@ -103,11 +115,28 @@ export function RiderHome() {
     return m
   }, [demand.data])
 
-  const hubs = useQuery<{ items: Hub[] }>({
-    queryKey: ['hubs'],
-    queryFn: () => api.get('/hubs'),
+  const hubs = useQuery<{ items: Hub[]; frequentIds: string[] }>({
+    queryKey: ['hubs', userCoords?.lat, userCoords?.lng],
+    queryFn: () => {
+      const params = new URLSearchParams()
+      if (userCoords) { params.set('lat', String(userCoords.lat)); params.set('lng', String(userCoords.lng)) }
+      return api.get(`/hubs?${params}`)
+    },
     staleTime: 10 * 60 * 1000,
   })
+
+  const sortedHubs = useMemo(() => {
+    const items = hubs.data?.items ?? []
+    if (userCoords && items.some(h => h.distanceKm != null)) return items
+    const frequentIds = new Set(hubs.data?.frequentIds ?? [])
+    return [...items.filter(h => frequentIds.has(h.id)), ...items.filter(h => !frequentIds.has(h.id))]
+  }, [hubs.data, userCoords])
+
+  const filteredHubs = useMemo(() => {
+    if (!hubSearch.trim()) return sortedHubs
+    const q = hubSearch.toLowerCase()
+    return sortedHubs.filter(h => h.name.toLowerCase().includes(q))
+  }, [sortedHubs, hubSearch])
 
   // Derive hub names strictly from real demand data only — no fallback to hub list
   // so the grid never renders with hubs but no trip data
@@ -368,16 +397,41 @@ export function RiderHome() {
         </span>
       </motion.div>
 
-      {/* Hub filter chips */}
-      <motion.div variants={fadeUp} transition={transition.default} className="flex gap-2 overflow-x-auto pb-1">
-        <Chip active={hubFilter === ''} onClick={() => setHubFilter('')}>
-          All hubs
-        </Chip>
-        {hubs.data?.items.map((h) => (
-          <Chip key={h.id} active={hubFilter === h.id} onClick={() => setHubFilter(h.id)}>
-            {h.name}
-          </Chip>
-        ))}
+      {/* Hub search + filter chips */}
+      <motion.div variants={fadeUp} transition={transition.default} className="space-y-2">
+        <div className="relative">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-stone-soft)] pointer-events-none">
+            <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2"/>
+            <path d="M16.5 16.5L21 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+          <input
+            value={hubSearch}
+            onChange={e => setHubSearch(e.target.value)}
+            placeholder="Search pickup points…"
+            className="w-full h-9 pl-8 pr-3 rounded-[10px] border border-[var(--color-hairline)] bg-[var(--color-paper)] text-[13px] outline-none focus:border-[var(--color-moss)] transition-colors placeholder:text-[var(--color-stone-soft)]"
+          />
+          {userCoords && (
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-mono text-[var(--color-moss)] uppercase tracking-wider">
+              Near you
+            </span>
+          )}
+        </div>
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          <Chip active={hubFilter === ''} onClick={() => setHubFilter('')}>All hubs</Chip>
+          {filteredHubs.map((h) => (
+            <Chip key={h.id} active={hubFilter === h.id} onClick={() => setHubFilter(h.id)}>
+              {h.name}
+              {h.distanceKm != null && (
+                <span className="ml-1 text-[9px] font-mono opacity-60">
+                  {h.distanceKm < 1 ? `${Math.round(h.distanceKm * 1000)}m` : `${h.distanceKm.toFixed(1)}km`}
+                </span>
+              )}
+            </Chip>
+          ))}
+          {filteredHubs.length === 0 && hubSearch && (
+            <span className="text-[12px] text-[var(--color-stone)] self-center px-1">No hubs match "{hubSearch}"</span>
+          )}
+        </div>
       </motion.div>
 
       {/* Trips list */}

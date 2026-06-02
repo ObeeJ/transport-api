@@ -3,6 +3,9 @@ package db
 import (
 	"fmt"
 	"log/slog"
+	"os"
+	"strconv"
+	"strings"
 
 	"github.com/obeej/akin/internal/models"
 	"gorm.io/gorm"
@@ -78,23 +81,34 @@ func seedInstitution(gdb *gorm.DB) error {
 	}).Error
 }
 
-// seedHubs — idempotent seed of a small starter set of curated pickup points.
-// Stewards will be able to edit these once an admin UI lands; for v1 we
-// just bootstrap a sensible default for the Lagos area.
+// seedHubs — idempotent seed of pickup hubs from SEED_HUBS env var.
+// Format: "Name|lat|lng,Name|lat|lng" — e.g.
+//   SEED_HUBS="Main Gate|6.4474|3.4525,Library|6.4500|3.4530"
+// Falls back to an empty seed (no hubs) when the var is not set, so
+// stewards can add hubs via the admin UI instead.
 func seedHubs(gdb *gorm.DB) error {
-	defaults := []models.Hub{
-		{Name: "Main Gate", Lat: 6.4474, Lng: 3.4525},
-		{Name: "Bode Thomas Bus Stop", Lat: 6.4933, Lng: 3.3686},
-		{Name: "Yaba Roundabout", Lat: 6.5095, Lng: 3.3711},
-		{Name: "Iyana-Ipaja", Lat: 6.6079, Lng: 3.2880},
+	raw := os.Getenv("SEED_HUBS")
+	if raw == "" {
+		return nil
 	}
-	for _, h := range defaults {
+	for _, entry := range strings.Split(raw, ",") {
+		parts := strings.SplitN(strings.TrimSpace(entry), "|", 3)
+		if len(parts) != 3 {
+			slog.Warn("seedHubs: skipping malformed entry", "entry", entry)
+			continue
+		}
+		lat, errLat := strconv.ParseFloat(strings.TrimSpace(parts[1]), 64)
+		lng, errLng := strconv.ParseFloat(strings.TrimSpace(parts[2]), 64)
+		if errLat != nil || errLng != nil {
+			slog.Warn("seedHubs: skipping entry with invalid coords", "entry", entry)
+			continue
+		}
+		name := strings.TrimSpace(parts[0])
 		var existing models.Hub
-		if err := gdb.Where("name = ?", h.Name).First(&existing).Error; err == nil {
+		if err := gdb.Where("name = ?", name).First(&existing).Error; err == nil {
 			continue // already seeded
 		}
-		h.Active = true
-		if err := gdb.Create(&h).Error; err != nil {
+		if err := gdb.Create(&models.Hub{Name: name, Lat: lat, Lng: lng, Active: true}).Error; err != nil {
 			return err
 		}
 	}

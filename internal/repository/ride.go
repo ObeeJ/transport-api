@@ -19,6 +19,35 @@ func (r *RideRepo) ListActiveHubs() ([]models.Hub, error) {
 	return items, r.db.Where("active = ?", true).Order("name asc").Find(&items).Error
 }
 
+func (r *RideRepo) FrequentHubIDsByRider(riderID uuid.UUID, n int) ([]string, error) {
+	var ids []string
+	err := r.db.Raw(`
+		SELECT t.origin_hub_id::text
+		FROM bookings b
+		JOIN trips t ON t.id = b.trip_id
+		WHERE b.rider_id = ?
+		  AND b.status IN ('booked','boarded','completed')
+		GROUP BY t.origin_hub_id
+		ORDER BY COUNT(*) DESC
+		LIMIT ?
+	`, riderID, n).Scan(&ids).Error
+	return ids, err
+}
+
+// ListHubsWithActiveTrips returns only hubs that have at least one upcoming
+// published or boarding trip (departure within the next 24 hours).
+func (r *RideRepo) ListHubsWithActiveTrips() ([]models.Hub, error) {
+	var items []models.Hub
+	now := time.Now()
+	err := r.db.Where("active = ? AND id IN (?)", true,
+		r.db.Model(&models.Trip{}).
+			Select("origin_hub_id").
+			Where("status IN ?", []string{"published", "boarding"}).
+			Where("departure_at BETWEEN ? AND ?", now.Add(-30*time.Minute), now.Add(24*time.Hour)),
+	).Order("name asc").Find(&items).Error
+	return items, err
+}
+
 func (r *RideRepo) FindHub(id uuid.UUID) (*models.Hub, error) {
 	var h models.Hub
 	return &h, r.db.First(&h, "id = ? AND active = ?", id, true).Error

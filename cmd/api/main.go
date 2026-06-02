@@ -276,6 +276,7 @@ func main() {
 
 	// Ride Network
 	app.Get("/hubs", authed, ridesH.ListHubs)
+	app.Get("/hubs/frequent", authed, ridesH.FrequentHubs)
 	app.Get("/trips/demand", authed, ridesH.TripDemand)
 	app.Get("/trips", authed, ridesH.ListTrips)
 	app.Post("/trips", authed, verifiedWrites, ridesH.PublishTrip)
