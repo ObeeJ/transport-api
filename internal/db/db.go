@@ -2,7 +2,9 @@ package db
 
 import (
 	"fmt"
+	"log"
 	"log/slog"
+	"os"
 	"time"
 
 	"gorm.io/driver/postgres"
@@ -16,12 +18,22 @@ func Open(dsn string, env string) (*gorm.DB, error) {
 		logLevel = logger.Info
 	}
 
+	gormLogger := logger.New(
+		log.New(os.Stdout, "\r\n", 0),
+		logger.Config{
+			SlowThreshold:             200 * time.Millisecond,
+			LogLevel:                  logLevel,
+			IgnoreRecordNotFoundError: true,
+			Colorful:                  true,
+		},
+	)
+
 	var gormDB *gorm.DB
 	var err error
 
 	for attempt := 1; attempt <= 10; attempt++ {
 		gormDB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
-			Logger:      logger.Default.LogMode(logLevel),
+			Logger:      gormLogger,
 			PrepareStmt: true,
 		})
 		if err == nil {

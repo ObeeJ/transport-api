@@ -33,11 +33,14 @@ async function ensureCSRF(): Promise<void> {
     csrfBootstrap = fetch(`${API_BASE}/auth/csrf`, { credentials: 'include' })
       .then((r) => r.json())
       .then((data: { token?: string }) => {
-        if (data?.token) csrfToken = data.token
+        if (data?.token) {
+          csrfToken = data.token
+        } else {
+          // Token missing from response — reset so the next request retries.
+          csrfBootstrap = null
+        }
       })
       .catch(() => {
-        // Swallow — the next state-changing request will retry the bootstrap
-        // by virtue of csrfToken still being null.
         csrfBootstrap = null
       })
   }
