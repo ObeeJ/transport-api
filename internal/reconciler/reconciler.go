@@ -15,7 +15,9 @@ type Reconciler struct {
 	interval time.Duration
 	cancel   context.CancelFunc
 
-	weeklyCredit *WeeklyCreditJob
+	weeklyCredit    *WeeklyCreditJob
+	consecFails     int
+	backoffDeadline time.Time
 }
 
 func New(db *gorm.DB, interval time.Duration) *Reconciler {
@@ -61,7 +63,27 @@ func (r *Reconciler) RunOnce() {
 	r.run()
 }
 
+const maxConsecFails = 3
+const backoffDuration = 10 * time.Minute
+
 func (r *Reconciler) run() {
+	if time.Now().Before(r.backoffDeadline) {
+		return
+	}
+
+	// Probe DB with a cheap ping before running all sweeps.
+	if sqlDB, err := r.db.DB(); err != nil || sqlDB.PingContext(context.Background()) != nil {
+		r.consecFails++
+		if r.consecFails >= maxConsecFails {
+			slog.Warn("reconciler: DB unreachable, backing off",
+				"backoff", backoffDuration, "consecFails", r.consecFails)
+			r.backoffDeadline = time.Now().Add(backoffDuration)
+			r.consecFails = 0
+		}
+		return
+	}
+	r.consecFails = 0
+
 	r.expireStalePendingDeposits()
 	r.expireStalePendingPayouts()
 	r.cancelPastDepartureTrips()
