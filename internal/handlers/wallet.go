@@ -4,16 +4,19 @@ import (
 	"errors"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/obeej/akin/internal/escrow"
 	"github.com/obeej/akin/internal/middleware"
 	"github.com/obeej/akin/internal/service"
+	"gorm.io/gorm"
 )
 
 type WalletHandler struct {
 	svc *service.WalletService
+	db  *gorm.DB
 }
 
-func NewWalletHandler(svc *service.WalletService) *WalletHandler {
-	return &WalletHandler{svc: svc}
+func NewWalletHandler(svc *service.WalletService, db *gorm.DB) *WalletHandler {
+	return &WalletHandler{svc: svc, db: db}
 }
 
 func (h *WalletHandler) Balance(c *fiber.Ctx) error {
@@ -59,4 +62,18 @@ func (h *WalletHandler) Debit(c *fiber.Ctx) error {
 		return c.Status(500).JSON(fiber.Map{"error": "debit_failed"})
 	}
 	return c.JSON(fiber.Map{"ok": true})
+}
+
+// EscrowHolds returns active escrow holds for the current user.
+func (h *WalletHandler) EscrowHolds(c *fiber.Ctx) error {
+	user := middleware.CurrentUser(c)
+	if user == nil {
+		return c.Status(401).JSON(fiber.Map{"error": "not_authenticated"})
+	}
+	var holds []escrow.Hold
+	if err := h.db.Where("from_account_id = ? AND state = 'held'", user.ID).
+		Order("created_at desc").Find(&holds).Error; err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "query_failed"})
+	}
+	return c.JSON(fiber.Map{"items": holds})
 }

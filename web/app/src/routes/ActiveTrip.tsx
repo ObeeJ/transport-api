@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { motion } from 'motion/react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { api } from '@/lib/api'
+import { EscrowHold, api } from '@/lib/api'
 import { fadeUp, stagger, transition } from '@/lib/motion'
 
 type TripDetail = {
@@ -54,6 +54,16 @@ export function ActiveTrip() {
 
   const { trip, hubName, bookedCount, driverName } = q.data
 
+  // Escrow hold for this booking (if any).
+  const escrowQ = useQuery<{ items: EscrowHold[] }>({
+    queryKey: ['wallet', 'escrow'],
+    queryFn: () => api.wallet.escrow(),
+    enabled: !!q.data?.myBooking,
+  })
+  const bookingHold = escrowQ.data?.items.find(
+    (h) => h.referenceId === q.data?.myBooking?.id,
+  )
+
   return (
     <motion.div
       variants={stagger(0.08, 0.02)}
@@ -85,7 +95,10 @@ export function ActiveTrip() {
                 {hubName} → {trip.destination}
               </div>
             </div>
-            <StatusPill status={trip.status} />
+            <div className="flex flex-col items-end gap-1">
+              <StatusPill status={trip.status} />
+              {bookingHold && <EscrowPill hold={bookingHold} />}
+            </div>
           </div>
 
           <div className="my-3 h-px bg-[var(--color-hairline)]" />
@@ -350,6 +363,33 @@ function StatusPill({ status }: { status: string }) {
       style={{ background: c.bg, color: c.fg }}
     >
       {status.replace('_', ' ')}
+    </span>
+  )
+}
+
+function EscrowPill({ hold }: { hold: EscrowHold }) {
+  const labels: Record<string, string> = {
+    held: 'Held',
+    released: 'Released',
+    refunded: 'Refunded',
+    frozen: 'Frozen',
+    expired: 'Expired',
+  }
+  const colors: Record<string, { bg: string; fg: string }> = {
+    held: { bg: 'rgba(217,119,87,0.15)', fg: 'var(--color-clay)' },
+    released: { bg: 'rgba(94,114,89,0.15)', fg: 'var(--color-moss)' },
+    refunded: { bg: 'rgba(27,42,78,0.10)', fg: 'var(--color-indigo)' },
+    frozen: { bg: 'rgba(200,75,58,0.15)', fg: 'var(--color-coral)' },
+    expired: { bg: 'rgba(0,0,0,0.05)', fg: 'var(--color-stone)' },
+  }
+  const c = colors[hold.state] ?? { bg: 'rgba(0,0,0,0.05)', fg: 'var(--color-stone)' }
+  return (
+    <span
+      className="font-mono text-[10px] uppercase tracking-wider px-2 py-1 rounded-full"
+      style={{ background: c.bg, color: c.fg }}
+      title={`₦${Math.round(hold.amountKobo / 100).toLocaleString('en-NG')} ${labels[hold.state] ?? hold.state}`}
+    >
+      {labels[hold.state] ?? hold.state}
     </span>
   )
 }

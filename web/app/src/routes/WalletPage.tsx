@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, api } from '@/lib/api'
+import { ApiError, EscrowHold, api } from '@/lib/api'
 
 type Wallet = { id: string; balanceKobo: number; updatedAt: string }
 type Tx = {
@@ -62,6 +62,11 @@ export function WalletPage() {
   const balance = wallet.data?.balanceKobo ?? 0
   const canWithdraw = isApproved && hasBank && balance >= 100 * 100
 
+  const escrow = useQuery<{ items: EscrowHold[] }>({
+    queryKey: ['wallet', 'escrow'],
+    queryFn: () => api.wallet.escrow(),
+  })
+
   return (
     <div className="pt-4">
       <h2 className="text-[28px] font-medium tracking-tight text-[var(--color-indigo)] leading-tight">
@@ -92,6 +97,32 @@ export function WalletPage() {
       </div>
 
       {canWithdraw && bank.data ? <WithdrawCard balance={balance} bank={bank.data} qc={qc} /> : null}
+
+      {(escrow.data?.items ?? []).length > 0 && (
+        <div className="mt-6">
+          <div className="label-cap mb-3">Held funds</div>
+          <div className="card-base divide-y divide-[var(--color-hairline)]">
+            {escrow.data!.items.map((hold) => (
+              <div key={hold.id} className="px-4 py-3 flex items-center justify-between">
+                <div>
+                  <div className="text-sm text-[var(--color-ink)]">{hold.purpose}</div>
+                  <div className="text-[10px] text-[var(--color-stone)] mt-0.5">
+                    {hold.expiresAt
+                      ? `Expires ${new Date(hold.expiresAt).toLocaleDateString('en-NG')}`
+                      : 'No expiry'}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="font-mono text-sm font-medium text-[var(--color-amber)]">
+                    {naira(hold.amountKobo)} held
+                  </div>
+                  <div className="text-[10px] text-[var(--color-stone)] mt-0.5 capitalize">{hold.state}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="mt-6">
         <div className="label-cap mb-3">Transactions</div>

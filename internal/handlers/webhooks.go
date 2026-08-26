@@ -6,18 +6,20 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 	"github.com/obeej/akin/internal/audit"
 	"github.com/obeej/akin/internal/models"
+	"github.com/obeej/akin/internal/outbox"
 	"github.com/obeej/akin/internal/payments"
 	"github.com/obeej/akin/internal/service"
 	"gorm.io/gorm"
 )
 
 type WebhookHandler struct {
-	deposits payments.DisbursementProvider
-	depSvc   *service.DepositService
+	deposits  payments.DisbursementProvider
+	depSvc    *service.DepositService
 	payoutSvc *service.PayoutService
-	db       *gorm.DB
+	db        *gorm.DB
 }
 
 func NewWebhookHandler(p payments.DisbursementProvider, depSvc *service.DepositService, payoutSvc *service.PayoutService, db *gorm.DB) *WebhookHandler {
@@ -45,31 +47,41 @@ func (h *WebhookHandler) Paystack(c *fiber.Ctx) error {
 		return c.Status(400).JSON(fiber.Map{"error": "invalid_payload"})
 	}
 
-	// Idempotency: Paystack doesn't ship a stable event UUID, but
-	// (event, reference) is unique per delivery. Inserting with a unique
-	// index gives us atomic dedupe — a duplicate event hits the constraint
-	// and we 200 OK without re-running the side-effects.
 	eventKey := evt.Event + ":" + evt.Data.Reference
-	we := &models.WebhookEvent{
-		Source:     "paystack",
-		EventID:    eventKey,
-		EventType:  evt.Event,
-		ReceivedAt: time.Now(),
-	}
-	if err := h.db.Create(we).Error; err != nil {
-		// Duplicate — we've already processed this exact delivery.
-		// We *still* 200 OK so Paystack stops retrying.
-		if isUniqueViolation(err) {
-			audit.Record(h.db, "system", "webhook_duplicate", eventKey, nil)
-			return c.JSON(fiber.Map{"ok": true, "duplicate": true})
+
+	// Persist raw event to outbox + dedupe atomically.
+	err := h.db.Transaction(func(tx *gorm.DB) error {
+		we := &models.WebhookEvent{
+			Source:     "paystack",
+			EventID:    eventKey,
+			EventType:  evt.Event,
+			ReceivedAt: time.Now(),
 		}
-		// Other DB error — best-effort, log and continue. The side-effect
-		// handlers below are themselves idempotent, so a missed dedupe
-		// row is at worst a duplicate of an already-idempotent action.
-		audit.Record(h.db, "system", "webhook_dedupe_record_failed", eventKey,
-			map[string]any{"err": err.Error()})
+		if err := tx.Create(we).Error; err != nil {
+			if isUniqueViolation(err) {
+				return errDuplicate
+			}
+			return err
+		}
+		// Emit to outbox for async processing.
+		return outbox.Emit(tx, uuid.New(), "webhook.paystack."+evt.Event, map[string]any{
+			"reference": evt.Data.Reference,
+			"status":    evt.Data.Status,
+			"amount":    evt.Data.Amount,
+			"event":     evt.Event,
+		})
+	})
+
+	if errors.Is(err, errDuplicate) {
+		audit.Record(h.db, "system", "webhook_duplicate", eventKey, nil)
+		return c.JSON(fiber.Map{"ok": true, "duplicate": true})
+	}
+	if err != nil {
+		audit.Record(h.db, "system", "webhook_outbox_failed", eventKey, map[string]any{"err": err.Error()})
+		// Still ack to Paystack — we'll retry via outbox.
 	}
 
+	// Process synchronously as well (belt-and-suspenders until outbox handlers are wired).
 	switch evt.Event {
 	case "charge.success":
 		if err := h.depSvc.Settle(evt.Data.Reference); err != nil {
@@ -84,13 +96,12 @@ func (h *WebhookHandler) Paystack(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"ok": true})
 }
 
-// isUniqueViolation — best-effort detection across GORM error wrappers.
-// Postgres returns SQLSTATE 23505 for unique constraint violations.
+var errDuplicate = errors.New("duplicate")
+
 func isUniqueViolation(err error) bool {
 	if err == nil {
 		return false
 	}
-	// GORM wraps the pgx error; the SQLSTATE shows up in the string.
 	msg := err.Error()
 	return contains(msg, "23505") ||
 		contains(msg, "duplicate key") ||

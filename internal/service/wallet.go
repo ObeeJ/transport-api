@@ -6,15 +6,22 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/obeej/akin/internal/audit"
+	"github.com/obeej/akin/internal/ledger"
 	"github.com/obeej/akin/internal/models"
+	"github.com/obeej/akin/internal/outbox"
 	"github.com/obeej/akin/internal/repository"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var (
 	ErrInsufficientBalance = errors.New("insufficient_balance")
 	ErrWalletNotFound      = errors.New("wallet_not_found")
 )
+
+// poolAccountID is the virtual account ID used as the counter-party for
+// fund-pool movements. It is a fixed sentinel UUID, not a real wallet row.
+var poolAccountID = uuid.MustParse("00000000-0000-0000-0000-000000000002")
 
 type WalletService struct {
 	repo   *repository.WalletRepo
@@ -38,54 +45,115 @@ func (s *WalletService) Transactions(userID uuid.UUID) ([]models.WalletTransacti
 	return s.repo.ListTransactions(userID, 50)
 }
 
-// Credit is called by PayoutService when a wallet recipient is paid.
+// Credit atomically credits a wallet, writes a double-entry ledger pair,
+// and emits an outbox event — all inside a single DB transaction.
 func (s *WalletService) Credit(userID uuid.UUID, amountKobo int64, description, refID string) error {
-	tx, err := s.repo.Credit(userID, amountKobo, description, refID)
-	if err != nil {
-		return err
-	}
-	audit.Record(s.db, "system", "wallet_credited", userID.String(), map[string]any{
-		"amountKobo":  amountKobo,
-		"balanceKobo": tx.BalanceKobo,
-		"refId":       refID,
+	txnID := uuid.New()
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		var w models.Wallet
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("user_id = ?", userID).FirstOrCreate(&w).Error; err != nil {
+			return err
+		}
+		balanceBefore := w.BalanceKobo
+		w.BalanceKobo += amountKobo
+		if err := tx.Save(&w).Error; err != nil {
+			return err
+		}
+		wtx := models.WalletTransaction{
+			WalletID: w.ID, UserID: userID,
+			Type: "credit", AmountKobo: amountKobo,
+			BalanceKobo: w.BalanceKobo, Description: description, RefID: refID,
+		}
+		if err := tx.Create(&wtx).Error; err != nil {
+			return err
+		}
+		// Double-entry: pool debits, user wallet credits.
+		if err := ledger.Write(tx, txnID,
+			ledger.Account{ID: poolAccountID},
+			ledger.Account{ID: w.ID},
+			amountKobo, description,
+			balanceBefore, // pool balance tracking not enforced here — sentinel account
+			w.BalanceKobo,
+			map[string]any{"ref_id": refID},
+		); err != nil {
+			return err
+		}
+		if err := outbox.Emit(tx, userID, "wallet.credited", map[string]any{
+			"user_id":      userID,
+			"amount_kobo":  amountKobo,
+			"balance_kobo": w.BalanceKobo,
+			"ref_id":       refID,
+		}); err != nil {
+			return err
+		}
+		audit.Record(tx, "system", "wallet_credited", userID.String(), map[string]any{
+			"amountKobo": amountKobo, "balanceKobo": w.BalanceKobo, "refId": refID,
+		})
+		_ = s.notify.Send(userID, "wallet_credited",
+			"Your wallet has been credited",
+			fmt.Sprintf("₦%s has been added to your wallet.", formatKobo(amountKobo)),
+		)
+		return nil
 	})
-	_ = s.notify.Send(userID, "wallet_credited",
-		"Your wallet has been credited",
-		fmt.Sprintf("₦%s has been added to your wallet.", formatKobo(amountKobo)),
-	)
-	return nil
 }
 
-// Debit is called when a user withdraws or spends from their wallet.
+// Debit atomically debits a wallet with ledger + outbox inside one transaction.
 func (s *WalletService) Debit(userID uuid.UUID, amountKobo int64, description, refID string) error {
-	_, err := s.repo.Debit(userID, amountKobo, description, refID)
-	if err != nil {
-		if errors.Is(err, repository.ErrInsufficientBalance) {
+	txnID := uuid.New()
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		var w models.Wallet
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("user_id = ?", userID).First(&w).Error; err != nil {
+			return err
+		}
+		if w.BalanceKobo < amountKobo {
 			return ErrInsufficientBalance
 		}
-		return err
-	}
-	audit.Record(s.db, userID.String(), "wallet_debited", userID.String(), map[string]any{
-		"amountKobo": amountKobo,
-		"refId":      refID,
+		balanceBefore := w.BalanceKobo
+		w.BalanceKobo -= amountKobo
+		if err := tx.Save(&w).Error; err != nil {
+			return err
+		}
+		wtx := models.WalletTransaction{
+			WalletID: w.ID, UserID: userID,
+			Type: "debit", AmountKobo: amountKobo,
+			BalanceKobo: w.BalanceKobo, Description: description, RefID: refID,
+		}
+		if err := tx.Create(&wtx).Error; err != nil {
+			return err
+		}
+		// Double-entry: user wallet debits, pool credits.
+		if err := ledger.Write(tx, txnID,
+			ledger.Account{ID: w.ID},
+			ledger.Account{ID: poolAccountID},
+			amountKobo, description,
+			w.BalanceKobo,
+			balanceBefore, // pool balance tracking not enforced here — sentinel account
+			map[string]any{"ref_id": refID},
+		); err != nil {
+			return err
+		}
+		if err := outbox.Emit(tx, userID, "wallet.debited", map[string]any{
+			"user_id":      userID,
+			"amount_kobo":  amountKobo,
+			"balance_kobo": w.BalanceKobo,
+			"ref_id":       refID,
+		}); err != nil {
+			return err
+		}
+		audit.Record(tx, userID.String(), "wallet_debited", userID.String(), map[string]any{
+			"amountKobo": amountKobo, "refId": refID,
+		})
+		return nil
 	})
-	return nil
 }
 
-// CreditOnce — idempotent credit keyed on `refID`. Returns
-// (credited=true, nil) when a new transaction was inserted, or
-// (credited=false, nil) when a prior transaction with the same refID
-// already existed. Used by the weekly cron so re-running the job — or
-// running it multiple times within the same week — doesn't double-credit.
+// CreditOnce — idempotent credit keyed on refID.
 func (s *WalletService) CreditOnce(userID uuid.UUID, amountKobo int64, description, refID string) (bool, error) {
 	if refID == "" {
-		// Refuse — idempotency requires a stable key. Use Credit() for one-shot ops.
 		return false, fmt.Errorf("CreditOnce requires a non-empty refID")
 	}
-	// Cheap dedupe check first; race-tolerant because we then rely on the
-	// (eventually-added) unique index on wallet_transactions.ref_id to
-	// reject a concurrent dup at insert time. For v1 the check + insert
-	// race is acceptable — the cron runs single-process.
 	var n int64
 	if err := s.db.Model(&models.WalletTransaction{}).
 		Where("ref_id = ?", refID).Count(&n).Error; err != nil {
@@ -101,6 +169,5 @@ func (s *WalletService) CreditOnce(userID uuid.UUID, amountKobo int64, descripti
 }
 
 func formatKobo(kobo int64) string {
-	naira := kobo / 100
-	return fmt.Sprintf("%d", naira)
+	return fmt.Sprintf("%d", kobo/100)
 }

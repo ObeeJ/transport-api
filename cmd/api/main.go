@@ -15,7 +15,9 @@ import (
 	"github.com/obeej/akin/internal/db"
 	"github.com/obeej/akin/internal/email"
 	"github.com/obeej/akin/internal/handlers"
+	"github.com/obeej/akin/internal/idempotency"
 	"github.com/obeej/akin/internal/middleware"
+	"github.com/obeej/akin/internal/outbox"
 	"github.com/obeej/akin/internal/payments"
 	"github.com/obeej/akin/internal/payments/paystack"
 	"github.com/obeej/akin/internal/reconciler"
@@ -131,6 +133,17 @@ func main() {
 	service.SetDefaultIntegrity(integritySvc)
 	reportSvc := service.NewReportService(depositRepo, payoutRepo, recipientRepo, rideRepo, attendanceRepo, ratingRepo, impactRepo)
 
+	// --- Idempotency store ---
+	idempotencyStore := idempotency.NewStore(gdb)
+	idempotencyRequired := idempotency.Middleware(idempotencyStore, true)
+	idempotencyOptional := idempotency.Middleware(idempotencyStore, false)
+	_ = idempotencyOptional // used on optional endpoints
+
+	// --- Outbox dispatcher ---
+	outboxDispatcher := outbox.NewDispatcher(gdb)
+	// Register handlers for known event types here as they are implemented.
+	outboxDispatcher.Start()
+
 	// --- Handlers ---
 	authH := handlers.NewAuthHandler(authSvc, cfg)
 	emailVerifyH := handlers.NewEmailVerifyHandler(emailVerifySvc, cfg.AppBaseURL)
@@ -144,7 +157,7 @@ func main() {
 	webhookH := handlers.NewWebhookHandler(paymentProvider, depositSvc, payoutSvc, gdb)
 	resendWebhookH := handlers.NewResendWebhookHandler(cfg.ResendWebhookSecret, userRepo, notifyRepo, gdb)
 	notifyH := handlers.NewNotificationHandler(notifySvc)
-	walletH := handlers.NewWalletHandler(walletSvc)
+	walletH := handlers.NewWalletHandler(walletSvc, gdb)
 	driverH := handlers.NewDriverHandler(driverSvc)
 	attendanceH := handlers.NewAttendanceHandler(attendanceSvc)
 	rosterH := handlers.NewRosterHandler(rosterSvc)
@@ -259,10 +272,11 @@ func main() {
 	// Wallet
 	app.Get("/wallet", authed, walletH.Balance)
 	app.Get("/wallet/transactions", authed, walletH.Transactions)
-	app.Post("/wallet/debit", authed, walletH.Debit)
+	app.Get("/wallet/escrow", authed, walletH.EscrowHolds)
+	app.Post("/wallet/debit", authed, idempotencyRequired, walletH.Debit)
 	// Recipient self-service withdrawal: wallet → bank. Rate-limited like
 	// other payment-initiating endpoints; auth + CSRF apply via middleware.
-	app.Post("/wallet/withdraw", authed, verifiedWrites, paymentLimit, payoutH.Withdraw)
+	app.Post("/wallet/withdraw", authed, verifiedWrites, paymentLimit, idempotencyRequired, payoutH.Withdraw)
 
 	// Driver
 	app.Post("/driver/apply", authed, verifiedWrites, driverH.Apply)
@@ -284,7 +298,7 @@ func main() {
 	app.Post("/trips/:id/start", authed, ridesH.StartTrip)
 	app.Post("/trips/:id/complete", authed, ridesH.CompleteTrip)
 	app.Post("/trips/:id/cancel", authed, ridesH.CancelTrip)
-	app.Post("/trips/:id/bookings", authed, verifiedWrites, ridesH.BookSeat)
+	app.Post("/trips/:id/bookings", authed, verifiedWrites, idempotencyRequired, ridesH.BookSeat)
 	app.Delete("/trips/:id/bookings/me", authed, ridesH.CancelBooking)
 	app.Post("/trips/:id/attendance", authed, driverH.MarkAttendance)
 	app.Post("/trips/:id/ratings", authed, ratingH.Submit)
@@ -364,6 +378,7 @@ func main() {
 	<-quit
 	slog.Info("shutting down")
 	rec.Stop()
+	outboxDispatcher.Stop()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := app.ShutdownWithContext(ctx); err != nil {
