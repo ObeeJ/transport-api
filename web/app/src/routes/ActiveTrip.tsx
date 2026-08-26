@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { motion } from 'motion/react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { EscrowHold, api } from '@/lib/api'
+import { type EscrowHold, api } from '@/lib/api'
 import { fadeUp, stagger, transition } from '@/lib/motion'
 
 type TripDetail = {

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, EscrowHold, api } from '@/lib/api'
+import { ApiError, type EscrowHold, api } from '@/lib/api'
 
 type Wallet = { id: string; balanceKobo: number; updatedAt: string }
 type Tx = {
