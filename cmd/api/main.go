@@ -24,6 +24,7 @@ import (
 	"github.com/obeej/akin/internal/reconciler"
 	"github.com/obeej/akin/internal/repository"
 	"github.com/obeej/akin/internal/service"
+	"github.com/obeej/akin/internal/sponsor"
 	"github.com/obeej/akin/internal/storage"
 	"github.com/obeej/akin/internal/wings"
 	"github.com/obeej/akin/internal/ws"
@@ -202,9 +203,14 @@ func main() {
 	matcherH := handlers.NewMatcherHandler(gdb)
 	socialH := handlers.NewSocialHandler(gdb)
 	ambassadorH := handlers.NewAmbassadorHandler(gdb)
-	sponsorH := handlers.NewSponsorHandler(gdb)
-	circleH := handlers.NewCircleHandler(gdb)
+	sponsorH := handlers.NewSponsorHandler(gdb, paymentProvider, cfg.MockTransfers)
+	circleH := handlers.NewCircleHandler(gdb, paymentProvider)
 	institutionH := handlers.NewInstitutionHandler(gdb)
+	adsH := handlers.NewAdsHandler(gdb)
+
+	// --- Sponsor auto-debit dispatcher ---
+	sponsorDispatcher := sponsor.NewDispatcher(gdb, paymentProvider, cfg.MockTransfers)
+	sponsorDispatcher.Start()
 
 	// --- App ---
 	app := fiber.New(fiber.Config{
@@ -267,6 +273,7 @@ func main() {
 	app.Post("/auth/password/reset/confirm", authLimit, authH.ConfirmPasswordReset)
 	app.Post("/auth/steward/otp/request", authLimit, authH.RequestStewardOTP)
 	app.Post("/auth/steward/otp/verify", authLimit, authH.VerifyStewardOTP)
+	app.Post("/auth/role-switch", authed, authH.RoleSwitch)
 	app.Post("/auth/logout", authed, authH.Logout)
 	app.Get("/auth/me", authed, authH.Me)
 	app.Post("/auth/password/reset-request", authLimit, authH.RequestPasswordReset)
@@ -405,23 +412,31 @@ func main() {
 	app.Post("/pricing/quote", authed, pricingH.Quote)
 	app.Post("/evidence/upload-url", authed, verifiedWrites, evidenceH.UploadURL)
 	app.Get("/evidence", authed, evidenceH.List)
-	adminGroup := app.Group("/admin", authed, middleware.RequireSteward())
+	// Gated to admins only (not stewards) — non-negotiable #11: "Admin is one
+	// person." Steward console stays on RequireSteward() above.
+	adminGroup := app.Group("/admin", authed, middleware.RequireAdmin())
 	adminGroup.Get("/metrics", adminH.Metrics)
 	adminGroup.Get("/pricing", adminH.GetPricing)
 	adminGroup.Patch("/pricing", adminH.UpdatePricing)
 	adminGroup.Get("/reports", adminH.Reports)
+	adminGroup.Get("/trust-queue", adminH.TrustQueue)
 	adminGroup.Get("/drivers/pending", adminH.PendingDrivers)
 	adminGroup.Post("/drivers/:userId/review", adminH.ReviewDriver)
 	adminGroup.Post("/evidence/:id/review", adminH.ReviewEvidence)
+	adminGroup.Post("/ads/:id/review", adsH.Review)
 
 	// Phase 3 — Trust + Matcher
 	app.Get("/trust/me", authed, trustH.Me)
+	app.Post("/rides/request", authed, matcherH.RequestRide)
 	app.Get("/rides/:id/status", authed, matcherH.RideStatus)
+	app.Post("/rides/:id/emergency-scan", authed, matcherH.EmergencyScan)
 
 	// Phase 4 — Social + Transparency
 	app.Post("/posts", authed, verifiedWrites, socialH.CreatePost)
 	app.Get("/feed", authed, socialH.Feed)
+	app.Get("/users/:id/profile", authed, socialH.UserProfile)
 	app.Post("/posts/:id/clap", authed, socialH.Clap)
+	app.Post("/posts/:id/reshare", authed, verifiedWrites, socialH.Reshare)
 	app.Post("/follows/:userId", authed, socialH.ToggleFollow)
 	app.Get("/streaks/me", authed, socialH.Streaks)
 	app.Get("/transparency/holds", authed, socialH.TransparencyHolds)
@@ -431,15 +446,24 @@ func main() {
 	app.Get("/ambassador/me", authed, ambassadorH.Me)
 	app.Post("/sponsor/recurring", authed, verifiedWrites, paymentLimit, sponsorH.SetupRecurring)
 	app.Delete("/sponsor/recurring/:id", authed, sponsorH.Cancel)
+	app.Post("/sponsor/recurring/:id/retry", authed, paymentLimit, sponsorH.Retry)
 
 	// Phase 6 — Circle
 	app.Get("/circle/status", authed, circleH.Status)
 	app.Post("/circle/purchase", authed, verifiedWrites, paymentLimit, circleH.Purchase)
+	app.Post("/circle/webhook", webhookLimit, circleH.Webhook)
+
+	// Ads (self-serve advertiser system)
+	app.Post("/ads", authed, verifiedWrites, adsH.Create)
+	app.Get("/ads/mine", authed, adsH.Mine)
+	app.Post("/ads/:id/pause", authed, adsH.Pause)
 
 	// Phase 7 — Multi-tenant Circles
 	app.Get("/circles/mine", authed, institutionH.Mine)
+	app.Post("/circles", authed, verifiedWrites, institutionH.Create)
 	app.Post("/circles/join/:token", authed, institutionH.Join)
 	app.Post("/circles/invite", authed, institutionH.GenerateInvite)
+	app.Post("/circles/:id/switch", authed, institutionH.Switch)
 
 	// Boot
 	weeklyCredit := reconciler.NewWeeklyCreditJob(recipientRepo, walletSvc, attendanceSvc, gdb)
@@ -463,6 +487,7 @@ func main() {
 	outboxDispatcher.Stop()
 	wingsWorker.Stop()
 	kycWorker.Stop()
+	sponsorDispatcher.Stop()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := app.ShutdownWithContext(ctx); err != nil {

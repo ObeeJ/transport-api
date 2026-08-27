@@ -320,6 +320,55 @@ func (c *Client) InitiateTransfer(ctx context.Context, t payments.TransferReques
 	}, nil
 }
 
+type chargeAuthBody struct {
+	Email             string `json:"email"`
+	Amount            int64  `json:"amount"`
+	AuthorizationCode string `json:"authorization_code"`
+	Reference         string `json:"reference,omitempty"`
+}
+
+type chargeAuthResp struct {
+	Status  bool   `json:"status"`
+	Message string `json:"message"`
+	Data    struct {
+		Status    string `json:"status"`
+		Reference string `json:"reference"`
+	} `json:"data"`
+}
+
+// ChargeAuthorization debits a stored card authorization — used for recurring
+// sponsor billing where the cardholder isn't present to re-enter their card.
+func (c *Client) ChargeAuthorization(ctx context.Context, r payments.ChargeRequest) (*payments.ChargeResponse, error) {
+	body, _ := json.Marshal(chargeAuthBody{
+		Email:             r.Email,
+		Amount:            r.AmountKobo,
+		AuthorizationCode: r.AuthorizationCode,
+		Reference:         r.Reference,
+	})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiBase+"/transaction/charge_authorization", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.secretKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	res, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("paystack charge authorization: %w", err)
+	}
+	defer res.Body.Close()
+
+	raw, _ := io.ReadAll(res.Body)
+	var parsed chargeAuthResp
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return nil, fmt.Errorf("paystack charge authorization decode: %w", err)
+	}
+	if res.StatusCode/100 != 2 || !parsed.Status {
+		return nil, fmt.Errorf("paystack charge authorization: %s", parsed.Message)
+	}
+	return &payments.ChargeResponse{Status: parsed.Data.Status, Reference: parsed.Data.Reference}, nil
+}
+
 // --- Webhook signature ---------------------------------------------------
 
 func (c *Client) VerifyWebhookSignature(body []byte, signatureHeader string) bool {

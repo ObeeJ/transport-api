@@ -109,3 +109,20 @@ func RequireSteward() fiber.Handler {
 		return c.Next()
 	}
 }
+
+// RequireAdmin gates a route to admins only. Unlike RequireSteward this does
+// NOT accept stewards — the admin console controls pricing, evidence review and
+// the trust-escalation queue, and the master plan holds that to a single person.
+// Must run after RequireAuth.
+func RequireAdmin() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		u := CurrentUser(c)
+		if u == nil {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "not_authenticated"})
+		}
+		if u.Role != models.RoleAdmin {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "admin_required"})
+		}
+		return c.Next()
+	}
+}

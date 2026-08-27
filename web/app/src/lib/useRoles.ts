@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '@/lib/auth'
 import { api } from '@/lib/api'
 
-export type Role = 'giver' | 'commuter' | 'driver' | 'steward'
+export type Role = 'giver' | 'commuter' | 'driver'
 
 const ROLES_CACHE_KEY = 'akin.roles'
 
@@ -38,22 +38,12 @@ export function useRoles() {
 
   useEffect(() => {
     if (status === 'loading') return
-    if (!user) {
-      setRoles(['giver', 'commuter'])
-      return
-    }
+    if (!user) { setRoles(['giver', 'commuter']); return }
     const cached = readCache(user.id)
-    if (cached) {
-      setRoles(cached)
-      return
-    }
-    Promise.all([
-      api.get<{ status: string }>('/driver/me').catch(() => null),
-      api.get<{ status: string }>('/recipients/me').catch(() => null),
-    ]).then(([driver]) => {
+    if (cached) { setRoles(cached); return }
+    api.get<{ status: string }>('/driver/me').catch(() => null).then((driver) => {
       const r: Role[] = ['giver', 'commuter']
       if (driver?.status === 'approved' || driver?.status === 'pending') r.push('driver')
-      if (user.role === 'steward' || user.role === 'admin') r.push('steward')
       writeCache(user.id, r)
       setRoles(r)
     })
@@ -67,38 +57,25 @@ export const roleLabels: Record<Role, string> = {
   giver: 'Give',
   commuter: 'Commute',
   driver: 'Drive',
-  steward: 'Steward',
 }
 
 export const roleRoutes: Record<Role, string> = {
   giver: '/give',
   commuter: '/ride',
   driver: '/drive',
-  steward: '/steward',
 }
 
-// Active-role memory — used so shared pages (Account, Notifications) can
-// render the shell of whatever rail the user came from instead of always
-// flipping to giver. Persists across reloads via sessionStorage; falls
-// back to giver when nothing is stored or in-memory only when storage is
-// unavailable (e.g. private mode).
 const ACTIVE_ROLE_KEY = 'akin.activeRole'
-const SHARED_ROLES: Role[] = ['giver', 'commuter', 'driver', 'steward']
+const VALID_ROLES: Role[] = ['giver', 'commuter', 'driver']
 
 export function setActiveRole(role: Role): void {
-  try {
-    sessionStorage.setItem(ACTIVE_ROLE_KEY, role)
-  } catch {
-    // sessionStorage can throw in private mode / when disabled; ignore.
-  }
+  try { sessionStorage.setItem(ACTIVE_ROLE_KEY, role) } catch { /* ignore */ }
 }
 
 export function getActiveRole(): Role {
   try {
     const v = sessionStorage.getItem(ACTIVE_ROLE_KEY)
-    if (v && (SHARED_ROLES as string[]).includes(v)) return v as Role
-  } catch {
-    /* ignore */
-  }
+    if (v && (VALID_ROLES as string[]).includes(v)) return v as Role
+  } catch { /* ignore */ }
   return 'giver'
 }

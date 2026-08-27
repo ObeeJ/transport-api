@@ -33,15 +33,6 @@ const roleConfig = {
     iconSecondary: 'var(--color-indigo)',
     bg: 'linear-gradient(135deg, rgba(251, 248, 242, 0.95) 0%, rgba(242, 228, 208, 0.7) 100%)',
   },
-  steward: {
-    label: 'Steward',
-    sub: 'Review applications. Manage payouts.',
-    color: 'var(--color-coral)',
-    glowClass: 'glow-coral',
-    iconPrimary: 'var(--color-coral)',
-    iconSecondary: 'var(--color-indigo)',
-    bg: 'linear-gradient(135deg, rgba(251, 248, 242, 0.95) 0%, rgba(240, 232, 224, 0.7) 100%)',
-  },
 } as const
 
 function RoleIcon({ role, primary, secondary }: { role: keyof typeof roleConfig; primary: string; secondary: string }) {
@@ -70,14 +61,6 @@ function RoleIcon({ role, primary, secondary }: { role: keyof typeof roleConfig;
           <path d="M14 9V5M8.5 17.5l-3.5 2M19.5 17.5l3.5 2" stroke={primary} strokeWidth="2" strokeLinecap="round" />
         </svg>
       )
-    case 'steward':
-      return (
-        <svg width="32" height="32" viewBox="0 0 28 28" fill="none">
-          <path d="M14 3L5 7v7c0 5 4 9 9 11 5-2 9-6 9-11V7l-9-4z" stroke={primary} strokeWidth="2" strokeLinejoin="round" />
-          <circle cx="14" cy="12" r="3" fill={secondary} />
-          <path d="M10 17l4 2 4-2" stroke={primary} strokeWidth="2" strokeLinecap="round" />
-        </svg>
-      )
   }
 }
 
@@ -91,11 +74,11 @@ export function RoleHome() {
     // Only auto-redirect if user has been here before (has activeRole set)
     // New users should always see the role picker
     const hasActiveRole = sessionStorage.getItem('akin.activeRole')
-    if (!hasActiveRole && !roles.includes('driver') && !roles.includes('steward')) {
+    if (!hasActiveRole && !roles.includes('driver')) {
       // First time — show role picker, don't redirect
       return
     }
-    if (roles.includes('driver') || roles.includes('steward')) return
+    if (roles.includes('driver')) return
     navigate('/give', { replace: true })
   }, [roles, navigate, status])
 
@@ -104,7 +87,7 @@ export function RoleHome() {
   // Show role picker for all users — auto-redirect only for returning users
   // who have no elevated roles
   const hasActiveRole = sessionStorage.getItem('akin.activeRole')
-  if (hasActiveRole && !roles.includes('driver') && !roles.includes('steward')) {
+  if (hasActiveRole && !roles.includes('driver')) {
     return null
   }
 
@@ -112,7 +95,7 @@ export function RoleHome() {
 
   // New users see all 4 roles to pick from. Returning users with elevated
   // roles see only their unlocked roles.
-  const displayRoles = roles.includes('driver') || roles.includes('steward')
+  const displayRoles = roles.includes('driver')
     ? roles
     : (['giver', 'commuter', 'driver'] as const)
 
@@ -174,7 +157,7 @@ export function RoleHome() {
                   if (role === 'driver' && !roles.includes('driver')) {
                     navigate('/drive/apply')
                   } else {
-                    navigate(role === 'steward' ? '/steward' : roleRoutes[role])
+                    navigate(roleRoutes[role])
                   }
                 }}
                 className={`w-full text-left rounded-[18px] p-5 border border-[var(--color-hairline)] transition-all ${cfg.glowClass} hover:border-[var(--color-stone-soft)] cursor-pointer`}

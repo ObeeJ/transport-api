@@ -25,6 +25,7 @@ import (
 
 var (
 	ErrEmailTaken        = errors.New("email_taken")
+	ErrSignupDisabled    = errors.New("signup_disabled")
 	ErrInvalidCreds      = errors.New("invalid_credentials")
 	ErrPhoneInvalid      = errors.New("phone_invalid")
 	ErrPasswordTooShort  = errors.New("password_too_short")
@@ -91,13 +92,21 @@ func (s *AuthService) Signup(input SignupInput) (*SessionToken, error) {
 		return nil, ErrPhoneInvalid
 	}
 
-	if _, err := s.users.FindByEmail(input.Email); err == nil {
+	// Signup is invite-only: only pre-seeded accounts may register.
+	// If the email already exists in the DB it was seeded by an admin;
+	// if it doesn't exist, registration is closed.
+	existing, err := s.users.FindByEmail(input.Email)
+	if err != nil {
+		// Email not found — not on the allowlist.
+		return nil, ErrSignupDisabled
+	}
+	// Email exists but already has a password — already registered.
+	if existing.PasswordHash != "" {
 		return nil, ErrEmailTaken
 	}
 
-	// Resolve which institution this account belongs to. Unknown/empty slug
-	// falls back to the default institution so single-tenant signup is unchanged.
-	institutionID := models.DefaultInstitutionID
+	// Resolve institution from the seeded user row.
+	institutionID := existing.InstitutionID
 	if input.OrgSlug != "" && s.institutions != nil {
 		if inst, err := s.institutions.FindBySlug(input.OrgSlug); err == nil {
 			institutionID = inst.ID
@@ -112,26 +121,24 @@ func (s *AuthService) Signup(input SignupInput) (*SessionToken, error) {
 	}
 
 	now := time.Now()
-	user := &models.User{
-		InstitutionID:     institutionID,
-		Email:             input.Email,
-		FirstName:         input.FirstName,
-		LastName:          input.LastName,
-		PhoneE164:         phone,
-		PasswordHash:      string(hash),
-		PrivacyAcceptedAt: &now,
-		PrivacyVersion:    PrivacyVersion,
-	}
-	if err := s.users.Create(user); err != nil {
+	// Update the seeded row with the supplied details.
+	existing.InstitutionID = institutionID
+	existing.FirstName = input.FirstName
+	existing.LastName = input.LastName
+	existing.PhoneE164 = phone
+	existing.PasswordHash = string(hash)
+	existing.PrivacyAcceptedAt = &now
+	existing.PrivacyVersion = PrivacyVersion
+	if err := s.users.Save(existing); err != nil {
 		return nil, err
 	}
 
-	st, err := s.issueSession(user)
+	st, err := s.issueSession(existing)
 	if err != nil {
 		return nil, err
 	}
 
-	audit.Record(s.db, user.ID.String(), "signup", user.ID.String(), nil)
+	audit.Record(s.db, existing.ID.String(), "signup", existing.ID.String(), nil)
 	return st, nil
 }
 
@@ -157,6 +164,26 @@ func (s *AuthService) Login(input LoginInput) (*SessionToken, error) {
 
 	audit.Record(s.db, user.ID.String(), "login", user.ID.String(), nil)
 	return st, nil
+}
+
+// ConfirmRoleSwitch re-checks the caller's password before letting the
+// frontend flip into a sensitive rail (e.g. the anonymous recipient/support
+// identity). The active "role" the user is acting under (giver/commuter/
+// driver/steward) is a client-side concept (see useRoles.ts) rather than a
+// stored column, so this is a step-up-auth checkpoint, not a role mutation —
+// it exists purely so the switch is deliberate and audit-logged, per the
+// master plan's non-negotiable that role switching always requires
+// password re-entry.
+func (s *AuthService) ConfirmRoleSwitch(userID uuid.UUID, password, newRole string) error {
+	user, err := s.users.FindByID(userID)
+	if err != nil {
+		return ErrInvalidCreds
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+		return ErrInvalidCreds
+	}
+	audit.Record(s.db, userID.String(), "role_switch_confirmed", userID.String(), map[string]any{"newRole": newRole})
+	return nil
 }
 
 func (s *AuthService) Logout(tokenHash string, userID uuid.UUID) error {

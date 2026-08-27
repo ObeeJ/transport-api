@@ -16,6 +16,10 @@ type DisbursementProvider interface {
 	ResolveAccount(ctx context.Context, bankCode, accountNumber string) (*ResolvedAccount, error)
 	CreateTransferRecipient(ctx context.Context, req TransferRecipientRequest) (*TransferRecipient, error)
 	InitiateTransfer(ctx context.Context, req TransferRequest) (*TransferResponse, error)
+
+	// ChargeAuthorization debits a previously-authorized card without the
+	// cardholder present — used for recurring sponsor auto-debit.
+	ChargeAuthorization(ctx context.Context, req ChargeRequest) (*ChargeResponse, error)
 }
 
 type InitializeRequest struct {
@@ -78,4 +82,17 @@ type TransferResponse struct {
 	TransferCode string // provider's id for this transfer
 	Status       string // "pending", "success", "otp" (requires OTP), "failed"
 	Reference    string
+}
+
+// ChargeRequest debits a stored card authorization (recurring sponsor billing).
+type ChargeRequest struct {
+	Email             string
+	AmountKobo        int64
+	AuthorizationCode string
+	Reference         string // our reference, used for idempotency + webhook matching
+}
+
+type ChargeResponse struct {
+	Status    string // "success", "failed", ...
+	Reference string
 }

@@ -6,6 +6,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/obeej/akin/internal/admin"
+	"github.com/obeej/akin/internal/matcher"
 	"github.com/obeej/akin/internal/middleware"
 	"github.com/obeej/akin/internal/pricing"
 	"gorm.io/gorm"
@@ -85,6 +86,12 @@ func (h *AdminHandler) ReviewEvidence(c *fiber.Ctx) error {
 
 func (h *AdminHandler) Reports(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"items": []any{}})
+}
+
+// TrustQueue lists rides the Trust Engine + matcher couldn't resolve
+// automatically — the ~10% that need a human admin's emergency-grant nod.
+func (h *AdminHandler) TrustQueue(c *fiber.Ctx) error {
+	return c.JSON(fiber.Map{"items": matcher.EmergencyQueue(h.db)})
 }
 
 func (h *AdminHandler) GetPricing(c *fiber.Ctx) error {

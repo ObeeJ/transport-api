@@ -76,7 +76,7 @@ export function DriverApply() {
     const statusLabel =
       d.status === 'approved' ? 'Approved — you can publish trips'
       : d.status === 'declined' ? 'Not approved this time'
-      : 'With the stewards — two must agree'
+      : 'Under review'
 
     return (
       <div className="pt-4">
@@ -139,17 +139,17 @@ export function DriverApply() {
         transition={transition.default}
         className="mt-3 text-[13px] leading-relaxed text-[var(--color-stone)]"
       >
-        Two stewards verify your details. No payment — this is in-kind giving. Your impact is tracked privately.
+        Your details are reviewed before you can publish trips. No payment — this is in-kind giving.
       </motion.p>
 
-      {/* What stewards see callout */}
+      {/* What admin sees callout */}
       <motion.div
         variants={fadeUp}
         transition={transition.default}
         className="mt-5 card-base p-4 border-l-4 border-l-[var(--color-clay)]"
         style={{ background: 'rgba(217,119,87,0.04)' }}
       >
-        <div className="label-cap text-[var(--color-clay)] mb-1">What stewards see</div>
+        <div className="label-cap text-[var(--color-clay)] mb-1">What the reviewer sees</div>
         <p className="text-[12px] text-[var(--color-stone)] leading-relaxed">
           Stewards review your <strong className="text-[var(--color-ink)]">vehicle plate</strong>, <strong className="text-[var(--color-ink)]">licence number</strong>, and <strong className="text-[var(--color-ink)]">vehicle type</strong> — nothing else about your identity. Make sure these match your physical documents exactly.
         </p>
@@ -271,7 +271,7 @@ export function DriverApply() {
                 onChange={(e) => setNote(e.target.value)}
                 maxLength={600}
                 rows={3}
-                placeholder="Anything stewards should know about your route or availability."
+                placeholder="Anything relevant about your route or availability."
                 className="w-full bg-transparent text-sm outline-none placeholder:text-[var(--color-stone-soft)] resize-none"
               />
             </div>
@@ -279,7 +279,7 @@ export function DriverApply() {
         </motion.div>
       </motion.div>
 
-      {/* Pre-submit steward preview */}
+      {/* Pre-submit preview */}
       <AnimatePresence>
         {showPreview && (
           <motion.div
@@ -317,7 +317,7 @@ export function DriverApply() {
               )}
             </div>
             <p className="mt-4 text-[11px] text-[var(--color-stone)]">
-              Does this look right? Two stewards will review this before you can publish trips.
+              Does this look right? Your application will be reviewed before you can publish trips.
             </p>
             {error && <p className="mt-2 text-[11px] text-[var(--color-coral)]">{error}</p>}
             <div className="mt-4 flex gap-3">
@@ -361,7 +361,7 @@ export function DriverApply() {
             </p>
           )}
           <p className="text-[11px] mt-3 text-center text-[var(--color-stone)]">
-            Two stewards must verify. You'll be notified of the outcome.
+            You'll be notified of the outcome.
           </p>
         </>
       )}

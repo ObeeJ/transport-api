@@ -1,19 +1,21 @@
+import { useState } from 'react'
 import { Link } from 'react-router'
 import { motion } from 'motion/react'
 import { useAuth } from '@/lib/auth'
 import { useRoles, roleLabels } from '@/lib/useRoles'
 import { fadeUp, stagger, transition } from '@/lib/motion'
+import { RoleSwitchModal } from '@/routes/RoleSwitchModal'
 
 const roleColors: Record<string, { bg: string; fg: string }> = {
   giver:   { bg: 'rgba(27,42,78,0.08)',   fg: 'var(--color-indigo)' },
   commuter: { bg: 'rgba(94,114,89,0.10)',  fg: 'var(--color-moss)'   },
   driver:  { bg: 'rgba(217,119,87,0.12)', fg: 'var(--color-clay)'   },
-  steward: { bg: 'rgba(200,75,58,0.10)',  fg: 'var(--color-coral)'  },
 }
 
 export function AccountPage() {
   const { user, logout } = useAuth()
   const roles = useRoles()
+  const [switchingTo, setSwitchingTo] = useState<string | null>(null)
 
   return (
     <motion.div
@@ -101,27 +103,35 @@ export function AccountPage() {
           })}
         </div>
         <p className="mt-3 text-[11px] text-[var(--color-stone)] leading-relaxed">
-          Everyone starts as a Giver and Commuter. To drive, go to <span className="font-medium text-[var(--color-ink)]">Drive → Apply to drive</span> and a steward will verify you. To receive support, go to <span className="font-medium text-[var(--color-ink)]">Commute → Support → Apply</span>.
+          Everyone starts as a Giver and Commuter. To drive, go to <span className="font-medium text-[var(--color-ink)]">Drive → Apply to drive</span>. To receive support, go to <span className="font-medium text-[var(--color-ink)]">Commute → Support → Apply</span>.
         </p>
       </motion.div>
 
-      {/* Student ID */}
+      {/* Support / anonymity switch — password-gated, always audit-logged */}
       <motion.div variants={fadeUp} transition={transition.default} className="card-base p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <div className="label-cap mb-1">Student ID</div>
-            <p className="text-[12px] text-[var(--color-stone)] leading-relaxed">
-              Required before applying for transport support. Your ID is hashed — the raw number is never stored.
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-[13px] font-medium text-[var(--color-ink)]">Switch to Support mode</p>
+            <p className="text-[11px] text-[var(--color-stone)] mt-0.5">
+              Enters your anonymous recipient identity. Requires your password each time.
             </p>
           </div>
-          <Link
-            to="/support/verify"
-            className="shrink-0 h-8 px-3 rounded-[10px] border border-[var(--color-hairline)] text-xs font-medium flex items-center text-[var(--color-ink)] hover:bg-[var(--color-cream-2)] transition-colors"
+          <button
+            onClick={() => setSwitchingTo('support')}
+            className="shrink-0 h-9 px-4 rounded-[10px] border border-[var(--color-hairline)] text-xs font-medium hover:bg-[var(--color-cream-2)] transition-colors"
           >
-            Verify →
-          </Link>
+            Switch
+          </button>
         </div>
       </motion.div>
+
+      {switchingTo && (
+        <RoleSwitchModal
+          targetRole={switchingTo}
+          onClose={() => setSwitchingTo(null)}
+          onSuccess={() => setSwitchingTo(null)}
+        />
+      )}
 
       {/* Sign out */}
       <motion.div variants={fadeUp} transition={transition.default} className="card-base p-5">

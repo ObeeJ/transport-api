@@ -3,6 +3,7 @@ package handlers
 import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"github.com/obeej/akin/internal/circle"
 	"github.com/obeej/akin/internal/middleware"
 	"github.com/obeej/akin/internal/social"
 	"github.com/obeej/akin/internal/transparency"
@@ -78,6 +79,29 @@ func (h *SocialHandler) Clap(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"ok": social.Clap(h.db, postID, user.ID, req.Count) == nil})
 }
 
+func (h *SocialHandler) Reshare(c *fiber.Ctx) error {
+	user := middleware.CurrentUser(c)
+	if user == nil {
+		return c.Status(401).JSON(fiber.Map{"error": "not_authenticated"})
+	}
+	postID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "invalid_id"})
+	}
+	var req struct {
+		Quote string `json:"quote"`
+	}
+	_ = c.BodyParser(&req)
+	reshare, err := social.ReshareCreate(h.db, postID, user.ID, req.Quote)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return c.Status(404).JSON(fiber.Map{"error": "post_not_found"})
+		}
+		return c.Status(500).JSON(fiber.Map{"error": "reshare_failed"})
+	}
+	return c.Status(201).JSON(reshare)
+}
+
 func (h *SocialHandler) ToggleFollow(c *fiber.Ctx) error {
 	user := middleware.CurrentUser(c)
 	if user == nil {
@@ -104,6 +128,50 @@ func (h *SocialHandler) Streaks(c *fiber.Ctx) error {
 		return c.Status(500).JSON(fiber.Map{"error": "query_failed"})
 	}
 	return c.JSON(fiber.Map{"items": streaks})
+}
+
+// UserProfile returns the public profile for a user — pseudonymous, per the
+// platform's anonymity-of-need design. Backs GET /users/:id/profile.
+func (h *SocialHandler) UserProfile(c *fiber.Ctx) error {
+	viewer := middleware.CurrentUser(c)
+	if viewer == nil {
+		return c.Status(401).JSON(fiber.Map{"error": "not_authenticated"})
+	}
+	targetID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "invalid_id"})
+	}
+	var exists int64
+	if h.db.Table("users").Where("id = ?", targetID).Count(&exists); exists == 0 {
+		return c.Status(404).JSON(fiber.Map{"error": "not_found"})
+	}
+
+	var followersCount, followingCount int64
+	h.db.Raw("SELECT COUNT(*) FROM follows WHERE followee_id = ?", targetID).Scan(&followersCount)
+	h.db.Raw("SELECT COUNT(*) FROM follows WHERE follower_id = ?", targetID).Scan(&followingCount)
+
+	isFollowing := false
+	if targetID != viewer.ID {
+		var count int64
+		h.db.Raw("SELECT COUNT(*) FROM follows WHERE follower_id = ? AND followee_id = ?", viewer.ID, targetID).Scan(&count)
+		isFollowing = count > 0
+	}
+
+	streaks, err := social.GetStreaks(h.db, targetID)
+	if err != nil {
+		streaks = nil
+	}
+
+	return c.JSON(fiber.Map{
+		"id":              targetID,
+		"pseudonymousId":  "akin-" + targetID.String()[:8],
+		"badge":           circle.BadgeLevel(h.db, targetID),
+		"streaks":         streaks,
+		"followersCount":  followersCount,
+		"followingCount":  followingCount,
+		"isFollowing":     isFollowing,
+		"isMe":            targetID == viewer.ID,
+	})
 }
 
 func (h *SocialHandler) TransparencyHolds(c *fiber.Ctx) error {

@@ -1,9 +1,7 @@
 import { Routes, Route } from 'react-router'
 import { RoleShell, SharedRoleShell } from '@/components/layout/RoleShell'
 import { RequireAuth } from '@/components/RequireAuth'
-import { RequireSteward } from '@/components/RequireSteward'
 import { RequireAdmin } from '@/components/RequireAdmin'
-import { StewardShell } from '@/components/layout/StewardShell'
 
 // Public
 import { Onboarding } from '@/routes/Onboarding'
@@ -22,12 +20,15 @@ import { PaystackCallback } from '@/routes/PaystackCallback'
 // Commuter rail
 import { RiderHome } from '@/routes/RiderHome'
 import { ActiveTrip } from '@/routes/ActiveTrip'
+import { RideSearching } from '@/routes/RideSearching'
+import { EmergencyGrantScan } from '@/routes/EmergencyGrantScan'
 
 // Driver rail
 import { DriverHome } from '@/routes/DriverHome'
 import { DriverApply } from '@/routes/DriverApply'
+import { SponsorSetup } from '@/routes/SponsorSetup'
 
-// Support / recipient rail
+// Support / recipient
 import { RecipientStatus } from '@/routes/RecipientStatus'
 import { RecipientApply } from '@/routes/RecipientApply'
 import { RecipientBank } from '@/routes/RecipientBank'
@@ -37,18 +38,21 @@ import { AccountPage } from '@/routes/AccountPage'
 import { WalletPage } from '@/routes/WalletPage'
 import { NotificationsPage } from '@/routes/NotificationsPage'
 import { EmailVerify } from '@/routes/EmailVerify'
+import { WingsPage } from '@/routes/WingsPage'
+import { KYCFlow } from '@/routes/KYCFlow'
+import { ProfilePage } from '@/routes/ProfilePage'
 
-// Steward console
-import { StewardQueue } from '@/routes/steward/StewardQueue'
-import { StewardApplication } from '@/routes/steward/StewardApplication'
-import { StewardAudit } from '@/routes/steward/StewardAudit'
-import { StewardPayouts } from '@/routes/steward/StewardPayouts'
-import { StewardAttendance } from '@/routes/steward/StewardAttendance'
-import { StewardRoster } from '@/routes/steward/StewardRoster'
-import { StewardSOS } from '@/routes/steward/StewardSOS'
-import { StewardAppeals } from '@/routes/steward/StewardAppeals'
-import { StewardDrivers } from '@/routes/steward/StewardDrivers'
-import { StewardSignIn } from '@/routes/steward/StewardSignIn'
+// Social feed
+import { FeedHome } from '@/routes/FeedHome'
+import { PostComposer } from '@/routes/PostComposer'
+
+// Ambassador + Circle + Ads
+import { AmbassadorDashboard } from '@/routes/AmbassadorDashboard'
+import { CirclePurchase } from '@/routes/CirclePurchase'
+import { CircleCreate } from '@/routes/CircleCreate'
+import { CircleJoin } from '@/routes/CircleJoin'
+import { AdvertiserPortal } from '@/routes/AdvertiserPortal'
+
 import { PrivacyPromise } from '@/routes/PrivacyPromise'
 import { NotFound } from '@/routes/NotFound'
 
@@ -68,13 +72,11 @@ export default function App() {
       <Route path="/reset-password/confirm" element={<ResetConfirm />} />
       <Route path="/account/reset-password" element={<ResetConfirm />} />
       <Route path="/account/forgot-password" element={<ResetRequest />} />
-      <Route path="/steward/sign-in" element={<StewardSignIn />} />
       <Route path="/admin/sign-in" element={<AdminSignIn />} />
       <Route path="/privacy" element={<PrivacyPromise />} />
       <Route path="/privacy-promise" element={<PrivacyPromise />} />
 
       <Route element={<RequireAuth />}>
-        {/* Role home — picks the right shell */}
         <Route path="/" element={<RoleHome />} />
 
         {/* ── Giver rail ── */}
@@ -83,13 +85,14 @@ export default function App() {
           <Route path="/notes" element={<NotesFeed />} />
           <Route path="/transparency" element={<TransparencyReport />} />
         </Route>
-        {/* Paystack callback — full-screen, outside shell */}
         <Route path="/give/callback" element={<PaystackCallback />} />
 
         {/* ── Commuter rail ── */}
         <Route element={<RoleShell role="commuter" />}>
           <Route path="/ride" element={<RiderHome />} />
           <Route path="/trip/:tripId" element={<ActiveTrip />} />
+          <Route path="/ride/searching/:rideId" element={<RideSearching />} />
+          <Route path="/ride/emergency-scan/:rideId" element={<EmergencyGrantScan />} />
           <Route path="/wallet" element={<WalletPage />} />
         </Route>
 
@@ -99,7 +102,7 @@ export default function App() {
           <Route path="/drive/apply" element={<DriverApply />} />
         </Route>
 
-        {/* ── Shared (preserves the rail the user came from) ── */}
+        {/* ── Shared ── */}
         <Route element={<SharedRoleShell />}>
           <Route path="/account" element={<AccountPage />} />
           <Route path="/account/verify-email" element={<EmailVerify />} />
@@ -108,6 +111,18 @@ export default function App() {
           <Route path="/support/status" element={<RecipientStatus />} />
           <Route path="/support/apply" element={<RecipientApply />} />
           <Route path="/support/bank" element={<RecipientBank />} />
+          <Route path="/wings" element={<WingsPage />} />
+          <Route path="/kyc" element={<KYCFlow />} />
+          <Route path="/feed" element={<FeedHome />} />
+          <Route path="/feed/compose" element={<PostComposer />} />
+          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/profile/:userId" element={<ProfilePage />} />
+          <Route path="/ambassador" element={<AmbassadorDashboard />} />
+          <Route path="/give/sponsor" element={<SponsorSetup />} />
+          <Route path="/circle" element={<CirclePurchase />} />
+          <Route path="/circles/create" element={<CircleCreate />} />
+          <Route path="/circles/join/:token" element={<CircleJoin />} />
+          <Route path="/ads" element={<AdvertiserPortal />} />
         </Route>
 
         {/* ── Admin console ── */}
@@ -117,24 +132,8 @@ export default function App() {
           <Route path="/admin/drivers" element={<DriverQueue />} />
           <Route path="/admin/reports" element={<ReportQueue />} />
         </Route>
-
-        {/* ── Steward console ── */}
-        <Route element={<RequireSteward />}>
-          <Route element={<StewardShell />}>
-            <Route path="/steward" element={<StewardQueue />} />
-            <Route path="/steward/applications/:id" element={<StewardApplication />} />
-            <Route path="/steward/payouts" element={<StewardPayouts />} />
-            <Route path="/steward/drivers" element={<StewardDrivers />} />
-            <Route path="/steward/sos" element={<StewardSOS />} />
-            <Route path="/steward/appeals" element={<StewardAppeals />} />
-            <Route path="/steward/attendance" element={<StewardAttendance />} />
-            <Route path="/steward/roster" element={<StewardRoster />} />
-            <Route path="/steward/audit" element={<StewardAudit />} />
-          </Route>
-        </Route>
       </Route>
 
-      {/* Fallback */}
       <Route path="*" element={<NotFound />} />
     </Routes>
   )

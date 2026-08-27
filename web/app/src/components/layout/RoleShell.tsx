@@ -12,7 +12,7 @@ import { useSidebarCollapsed } from '@/lib/useSidebarCollapsed'
 const giverNav  = [{ to: '/give', label: 'Pool' }, { to: '/notes', label: 'Notes' }, { to: '/transparency', label: 'Open' }]
 const commuterNav = [{ to: '/ride', label: 'Rides' }, { to: '/support', label: 'Support' }, { to: '/wallet', label: 'Wallet' }]
 const driverNav = [{ to: '/drive', label: 'Trips' }, { to: '/drive/apply', label: 'Verify' }]
-const sharedNav = [{ to: '/notifications', label: 'Inbox' }, { to: '/account', label: 'Account' }]
+const sharedNav = [{ to: '/feed', label: 'Feed' }, { to: '/notifications', label: 'Inbox' }, { to: '/account', label: 'Account' }]
 
 function navForRole(role: Role) {
   if (role === 'commuter') return commuterNav
@@ -26,7 +26,6 @@ const roleColors: Record<Role, { bg: string; fg: string }> = {
   giver:   { bg: 'rgba(27,42,78,0.08)',   fg: 'var(--color-indigo)' },
   commuter: { bg: 'rgba(94,114,89,0.10)',  fg: 'var(--color-moss)'   },
   driver:  { bg: 'rgba(217,119,87,0.12)', fg: 'var(--color-clay)'   },
-  steward: { bg: 'rgba(200,75,58,0.10)',  fg: 'var(--color-coral)'  },
 }
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -99,6 +98,13 @@ function NavIcon({ label, active }: { label: string; active: boolean }) {
   )
 
   // Shared
+  if (label === 'Feed') return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <rect x="3" y="4" width="18" height="16" rx="3" stroke={p} strokeWidth="1.8"/>
+      <path d="M7 9h10M7 13h6" stroke={c} strokeWidth="1.8" strokeLinecap="round"/>
+      <circle cx="17" cy="15" r="1.5" fill={c}/>
+    </svg>
+  )
   if (label === 'Inbox') return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
       <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke={p} strokeWidth="1.8"/>
@@ -141,13 +147,7 @@ function RoleIcon({ role, active }: { role: Role; active: boolean }) {
         <path d="M12 3v3M12 18v3M3 12h3M18 12h3" stroke={fg} strokeWidth="1.8" strokeLinecap="round"/>
       </svg>
     )
-    case 'steward': return (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-        <path d="M12 3L4 7v6c0 5 3.6 9.1 8 10 4.4-.9 8-5 8-10V7L12 3z" fill={fill} stroke={fg} strokeWidth="2" strokeLinejoin="round"/>
-        <path d="M9 12l2 2.5 4-4" stroke={fg} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      </svg>
-    )
-  }
+    }
 }
 
 // ─── Collapse toggle ──────────────────────────────────────────────────────────
@@ -183,7 +183,6 @@ export function RoleShell({ role }: { role: Role }) {
   // Notifications) can restore it instead of always flipping to giver.
   useEffect(() => { setActiveRole(role) }, [role])
 
-  const isSteward = user?.role === 'steward' || user?.role === 'admin'
   const primaryNav = navForRole(role)
   const allNav = [...primaryNav, ...sharedNav]
   const isMobile = bp === 'mobile'
@@ -222,7 +221,7 @@ export function RoleShell({ role }: { role: Role }) {
           {/* ── Role switcher ── */}
           {roles.length > 1 && (
             <div className={cn('pt-3 pb-2 border-b border-[var(--color-hairline)]', iconOnly ? 'px-2' : 'px-3')}>
-              {roles.filter(r => r !== 'steward').map((r) => {
+              {roles.map((r) => {
                 const isCurrent = r === role
                 const colors = roleColors[r]
                 return (
@@ -256,19 +255,6 @@ export function RoleShell({ role }: { role: Role }) {
                   </Link>
                 )
               })}
-              {isSteward && (
-                <Link
-                  to="/steward"
-                  title="Steward console"
-                  className={cn(
-                    'flex items-center rounded-[10px] transition-colors text-[var(--color-clay)] hover:bg-[rgba(217,119,87,0.08)] mt-0.5',
-                    iconOnly ? 'justify-center p-2.5' : 'gap-2.5 px-3 py-2',
-                  )}
-                >
-                  <span className="shrink-0"><RoleIcon role="steward" active={false} /></span>
-                  {!iconOnly && <span className="text-[11px] font-semibold uppercase tracking-widest">Steward</span>}
-                </Link>
-              )}
             </div>
           )}
 
@@ -384,11 +370,6 @@ export function RoleShell({ role }: { role: Role }) {
             </Link>
             <div className="flex items-center gap-1">
               {roles.length > 1 && <MobileRoleSwitcher roles={roles} current={role} />}
-              {isSteward && (
-                <Link to="/steward" className="flex items-center justify-center w-9 h-9 rounded-[10px] hover:bg-[var(--color-cream-2)] transition-colors" title="Steward console">
-                  <RoleIcon role="steward" active={false} />
-                </Link>
-              )}
               <NavLink
                 to="/notifications"
                 title="Inbox"
@@ -409,11 +390,6 @@ export function RoleShell({ role }: { role: Role }) {
             <span className="text-[13px] font-semibold text-[var(--color-indigo)] uppercase tracking-wider">{roleLabels[role]}</span>
             <div className="flex items-center gap-1">
               {roles.length > 1 && <MobileRoleSwitcher roles={roles} current={role} />}
-              {isSteward && (
-                <Link to="/steward" className="flex items-center justify-center w-9 h-9 rounded-[10px] text-[var(--color-clay)] hover:bg-[rgba(217,119,87,0.08)] transition-colors" title="Steward">
-                  <RoleIcon role="steward" active={false} />
-                </Link>
-              )}
               <NavLink
                 to="/notifications"
                 className={({ isActive }) => cn(
@@ -542,7 +518,7 @@ export function RoleShell({ role }: { role: Role }) {
 // ─── Mobile role switcher ─────────────────────────────────────────────────────
 
 function MobileRoleSwitcher({ roles, current }: { roles: Role[]; current: Role }) {
-  const visible = roles.filter(r => r !== 'steward')
+  const visible = roles
   if (visible.length <= 1) return null
 
   return (

@@ -84,3 +84,7 @@ func (r *UserRepo) ClearOTP(id uuid.UUID) error {
 		"otp_expires_at": nil,
 	}).Error
 }
+
+func (r *UserRepo) Save(u *models.User) error {
+	return r.db.Save(u).Error
+}

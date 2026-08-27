@@ -122,6 +122,26 @@ func (h *AuthHandler) Me(c *fiber.Ctx) error {
 	return c.JSON(toUserResponse(u))
 }
 
+// RoleSwitch is a step-up-auth checkpoint: re-confirms the caller's password
+// before the frontend flips their active rail into a sensitive context.
+func (h *AuthHandler) RoleSwitch(c *fiber.Ctx) error {
+	user := middleware.CurrentUser(c)
+	if user == nil {
+		return c.Status(401).JSON(fiber.Map{"error": "not_authenticated"})
+	}
+	var req struct {
+		Password string `json:"password"`
+		Role     string `json:"role"`
+	}
+	if err := c.BodyParser(&req); err != nil || req.Password == "" {
+		return c.Status(400).JSON(fiber.Map{"error": "invalid_body"})
+	}
+	if err := h.svc.ConfirmRoleSwitch(user.ID, req.Password, req.Role); err != nil {
+		return c.Status(401).JSON(fiber.Map{"error": "invalid_password"})
+	}
+	return c.JSON(fiber.Map{"ok": true})
+}
+
 func (h *AuthHandler) RequestPasswordReset(c *fiber.Ctx) error {
 	var req struct {
 		Email string `json:"email"`

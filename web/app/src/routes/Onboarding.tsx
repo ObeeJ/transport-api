@@ -279,6 +279,8 @@ function humanizeError(code: string): string {
       return 'Email or password is incorrect.'
     case 'privacy_required':
       return 'Please accept the Privacy Promise to continue.'
+    case 'signup_disabled':
+      return 'Registration is by invitation only. Contact the platform admin.'
     default:
       return 'Could not complete. Please try again.'
   }

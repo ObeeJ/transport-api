@@ -91,6 +91,24 @@ export function RideSearching() {
       </motion.div>
 
       <AnimatePresence>
+        {tier === 3 && s?.status === 'pending' && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="card-base p-4 w-full max-w-xs text-center"
+          >
+            <p className="text-[13px] font-medium text-[var(--color-coral)]">Met your emergency driver?</p>
+            <p className="mt-1 text-[11px] text-[var(--color-stone)]">
+              Scan each other's QR code in person to confirm the ride.
+            </p>
+            <button
+              onClick={() => navigate(`/ride/emergency-scan/${rideId}`)}
+              className="mt-3 btn-primary w-full h-9 text-sm"
+            >
+              Scan to confirm
+            </button>
+          </motion.div>
+        )}
         {s?.status === 'failed' && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}

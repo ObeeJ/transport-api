@@ -176,7 +176,9 @@ export const api = {
     me: () => get<TrustScore>('/trust/me'),
   },
   rides: {
+    request: () => post<{ rideId: string }>('/rides/request', undefined, true),
     status: (id: string) => get<LadderStatus>(`/rides/${id}/status`),
+    emergencyScan: (id: string) => post<{ ok: boolean }>(`/rides/${id}/emergency-scan`),
   },
 
   // Phase 4 — Social + Transparency
@@ -186,6 +188,7 @@ export const api = {
     list: (tab: 'foryou' | 'following' | 'circle' | 'nearby' | 'live' = 'foryou', limit = 20) =>
       get<{ items: Post[] }>(`/feed?tab=${tab}&limit=${limit}`),
     clap: (id: string, count: number) => post<{ ok: boolean }>(`/posts/${id}/clap`, { count }),
+    reshare: (id: string, quote?: string) => post<Post>(`/posts/${id}/reshare`, { quote }),
   },
   follows: {
     toggle: (userId: string) => post<{ following: boolean }>(`/follows/${userId}`),
@@ -206,6 +209,7 @@ export const api = {
     setupRecurring: (input: { amountKobo: number; cadence: string; authCode: string }) =>
       post<RecurringSponsor>('/sponsor/recurring', input),
     cancel: (id: string) => del<{ ok: boolean }>(`/sponsor/recurring/${id}`),
+    retryNow: (id: string) => post<{ ok: boolean }>(`/sponsor/recurring/${id}/retry`),
   },
 
   // Phase 6 — Circle
@@ -217,7 +221,18 @@ export const api = {
   // Phase 7 — Multi-tenant Circles
   circles: {
     mine: () => get<unknown>('/circles/mine'),
+    create: (name: string, slug: string, sector?: string) =>
+      post<{ id: string }>('/circles', { name, slug, sector }),
     join: (token: string) => post<{ ok: boolean }>(`/circles/join/${token}`),
     generateInvite: () => post<{ token: string }>('/circles/invite'),
+    switchTo: (id: string) => post<{ ok: boolean }>(`/circles/${id}/switch`),
+  },
+
+  // Ads — self-serve advertiser system
+  ads: {
+    create: (ctaUrl: string, budgetKobo: number, creativeKey = 'default') =>
+      post<unknown>('/ads', { ctaUrl, budgetKobo, creativeKey }),
+    mine: () => get<{ items: unknown[] }>('/ads/mine'),
+    pause: (id: string) => post<{ ok: boolean }>(`/ads/${id}/pause`),
   },
 }

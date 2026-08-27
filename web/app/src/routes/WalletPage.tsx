@@ -266,7 +266,7 @@ function WithdrawCard({
           {withdraw.isPending ? 'Sending…' : 'Withdraw'}
         </button>
         <p className="text-[10px] text-[var(--color-stone)] text-center">
-          No steward approval needed for routine withdrawals. Stewards are notified only of unusual activity.
+          No approval needed for routine withdrawals.
         </p>
       </form>
     </div>

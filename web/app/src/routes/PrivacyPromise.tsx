@@ -53,7 +53,7 @@ export function PrivacyPromise() {
           <Section title="What we collect">
             <List items={[
               <><strong>Account basics</strong> — first name, last name, email, Nigerian phone number. The phone is used only for SOS and account recovery; we don’t use it for marketing.</>,
-              <><strong>Authentication</strong> — a hashed password (we never see the plain text) or, for stewards, a 6-digit code emailed to you. We store a signed session cookie in your browser.</>,
+              <><strong>Authentication</strong> — a hashed password (we never see the plain text). We store a signed session cookie in your browser. We store a signed session cookie in your browser.</>,
               <><strong>Activity</strong> — your deposits, rides booked, trips published as a driver, and ratings you give. This is what makes the dashboards work.</>,
               <><strong>Payments</strong> — when you donate, Paystack processes the card transaction. We see only what they tell us: amount, reference, success/failure. We never see your card number.</>,
               <><strong>Bank accounts</strong> — recipients’ payout bank details, encrypted at rest. Used only to send approved disbursements via Paystack’s Transfer API.</>,
@@ -88,7 +88,7 @@ export function PrivacyPromise() {
 
           <Section title="What recipients see, what givers see">
             <p>
-              When you apply to receive help, only stewards see your real identity
+              When you apply to receive help, only the platform admin sees your real identity
               while they review your case. Once approved, you become a
               pseudonymous ID to every other user. Givers see aggregate
               impact (total disbursed, anonymised stories) — never a real name.

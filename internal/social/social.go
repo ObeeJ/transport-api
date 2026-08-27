@@ -69,6 +69,36 @@ func Feed(db *gorm.DB, userID uuid.UUID, tab string, limit int) ([]Post, error) 
 	return posts, q.Order("score DESC, created_at DESC").Limit(limit).Find(&posts).Error
 }
 
+type Reshare struct {
+	ID        uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+	PostID    uuid.UUID `gorm:"type:uuid;not null" json:"postId"`
+	UserID    uuid.UUID `gorm:"type:uuid;not null" json:"-"`
+	QuoteText string    `gorm:"column:quote_text" json:"quoteText,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+func (Reshare) TableName() string { return "reshares" }
+
+func (r *Reshare) BeforeCreate(_ *gorm.DB) error {
+	if r.ID == uuid.Nil {
+		r.ID = uuid.New()
+	}
+	return nil
+}
+
+// ReshareCreate records a reshare of an existing post, with an optional quote.
+func ReshareCreate(db *gorm.DB, postID, userID uuid.UUID, quote string) (*Reshare, error) {
+	var count int64
+	if err := db.Model(&Post{}).Where("id = ?", postID).Count(&count).Error; err != nil {
+		return nil, err
+	}
+	if count == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+	r := &Reshare{PostID: postID, UserID: userID, QuoteText: quote}
+	return r, db.Create(r).Error
+}
+
 // Clap upserts a clap count (1–50) for a post.
 func Clap(db *gorm.DB, postID, userID uuid.UUID, count int) error {
 	if count < 1 {
