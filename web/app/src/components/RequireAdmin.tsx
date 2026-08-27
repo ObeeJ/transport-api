@@ -10,16 +10,7 @@ export function RequireAdmin() {
       </div>
     )
   }
-  if (status === 'unauthenticated') return <Navigate to="/onboarding" replace />
-  if (user?.role !== 'admin') {
-    return (
-      <div className="min-h-dvh grid place-items-center text-center px-6 text-[var(--color-stone)]">
-        <div>
-          <div className="text-2xl text-[var(--color-indigo)] mb-2">Admin only.</div>
-          <p className="text-sm">This area is restricted to the platform administrator.</p>
-        </div>
-      </div>
-    )
-  }
+  if (status === 'unauthenticated') return <Navigate to="/admin/sign-in" replace />
+  if (user?.role !== 'admin') return <Navigate to="/admin/sign-in" replace />
   return <Outlet />
 }

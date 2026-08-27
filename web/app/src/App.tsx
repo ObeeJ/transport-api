@@ -57,6 +57,7 @@ import { AdminDashboard } from '@/routes/admin/AdminDashboard'
 import { PricingSettings } from '@/routes/admin/PricingSettings'
 import { DriverQueue } from '@/routes/admin/DriverQueue'
 import { ReportQueue } from '@/routes/admin/ReportQueue'
+import { AdminSignIn } from '@/routes/admin/AdminSignIn'
 
 export default function App() {
   return (
@@ -68,6 +69,7 @@ export default function App() {
       <Route path="/account/reset-password" element={<ResetConfirm />} />
       <Route path="/account/forgot-password" element={<ResetRequest />} />
       <Route path="/steward/sign-in" element={<StewardSignIn />} />
+      <Route path="/admin/sign-in" element={<AdminSignIn />} />
       <Route path="/privacy" element={<PrivacyPromise />} />
       <Route path="/privacy-promise" element={<PrivacyPromise />} />
 
