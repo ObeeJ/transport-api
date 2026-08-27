@@ -41,7 +41,7 @@ export function RecipientStatus() {
           You haven't applied yet.
         </h2>
         <p className="mt-3 text-[13px] text-[var(--color-stone)]">
-          If transport is keeping you from class, two stewards will read what you write — and decide together. Anonymously.
+          If transport is keeping you from getting around, apply for support. Your application is reviewed anonymously.
         </p>
         <Link to="/support/apply" className="btn-primary w-full mt-8 h-[52px]">
           Apply for support
@@ -86,7 +86,7 @@ export function RecipientStatus() {
       {r.status === 'declined' ? <AppealTile recipientId={r.id} /> : null}
 
       <p className="mt-6 text-[11px] text-[var(--color-stone)] leading-relaxed">
-        Decisions are made by two stewards — never one. Your name and email are not in their view. If anything in your situation changes, you can always reach out.
+        Decisions are made anonymously. Your name and email are not visible to reviewers.
       </p>
     </div>
   )
@@ -165,7 +165,7 @@ function AttendanceTile() {
           ? 'Last week\'s attendance is on file. You\'re eligible for this week\'s disbursement.'
           : previousFull?.recorded
             ? 'Last week\'s attendance was missed — payouts are paused this week. Reach out if circumstances were unusual.'
-            : 'Stewards haven\'t uploaded last week\'s attendance yet. Once they do, payouts resume.'}
+            : 'Attendance for last week hasn\'t been uploaded yet. Once it is, payouts resume.'}
       </p>
     </div>
   )
@@ -236,7 +236,7 @@ function statusLabel(status: Recipient['status']): string {
       return 'Decision made'
     case 'pending':
     default:
-      return 'With the stewards'
+      return 'Under review'
   }
 }
 
@@ -245,10 +245,10 @@ function statusBody(status: Recipient['status']): string {
     case 'approved':
       return "You're set. Funds will reach you on the next weekly cycle, tied to your attendance."
     case 'declined':
-      return "Stewards weren't able to approve this round. You can submit an appeal below — a different steward pair will take a fresh look."
+      return "The application wasn't approved this round. You can submit an appeal below for a fresh review."
     case 'pending':
     default:
-      return "Two stewards will read your note and decide together. We aim to respond within 48 hours."
+      return "Your application is under review. We aim to respond within 48 hours."
   }
 }
 
@@ -273,7 +273,7 @@ function AppealTile({ recipientId: _recipientId }: { recipientId: string }) {
       <div className="mt-4 card-base p-5">
         <div className="label-cap">Appeal this decision</div>
         <p className="mt-2 text-[12px] text-[var(--color-stone)] leading-relaxed">
-          If your circumstances have changed or you believe the decision was made in error, you can request a review by a different steward pair.
+          If your circumstances have changed or you believe the decision was made in error, you can request a fresh review.
         </p>
         <button
           onClick={() => setOpen(true)}
@@ -289,7 +289,7 @@ function AppealTile({ recipientId: _recipientId }: { recipientId: string }) {
     <div className="mt-4 card-base p-5">
       <div className="label-cap">Your appeal</div>
       <p className="mt-2 text-[12px] text-[var(--color-stone)]">
-        A different steward pair will review this. Be specific about what has changed.
+        Be specific about what has changed.
       </p>
       <textarea
         value={reason}

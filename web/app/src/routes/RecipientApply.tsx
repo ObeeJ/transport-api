@@ -1,6 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, Navigate } from 'react-router'
-import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router'
 import { motion, AnimatePresence } from 'motion/react'
 import { ApiError, api } from '@/lib/api'
 import { fadeUp, stagger, transition } from '@/lib/motion'
@@ -15,11 +14,6 @@ type Recipient = {
 export function RecipientApply() {
   const navigate = useNavigate()
   const toast = useToast()
-
-  const roster = useQuery<{ verified: boolean }>({
-    queryKey: ['roster', 'me'],
-    queryFn: () => api.get('/roster/me'),
-  })
 
   const [weeklyCost, setWeeklyCost] = useState('')
   const [situation, setSituation] = useState('')
@@ -36,37 +30,16 @@ export function RecipientApply() {
     }
     setSubmitting(true)
     try {
-      // Disbursement method is no longer a user choice — approved
-      // recipients are always credited to their wallet, and they
-      // withdraw to their bank themselves.
       await api.post<Recipient>('/recipients/apply', {
         weeklyCostKobo: cost * 100,
         situation,
       })
-      toast.show('Application sent. Two stewards will review it — you\'ll hear back within 48 hours.', 'success')
+      toast.show('Application sent. You\'ll hear back within 48 hours.', 'success')
       navigate('/support/status', { replace: true })
     } catch (err) {
-      if (err instanceof ApiError && err.code === 'steward_cannot_receive') {
-        setError('Stewards can\'t also be recipients — that separation is enforced for trust reasons.')
-      } else {
-        setError(err instanceof ApiError ? err.message : 'Could not submit. Try again.')
-      }
+      setError(err instanceof ApiError ? err.message : 'Could not submit. Try again.')
       setSubmitting(false)
     }
-  }
-
-  if (roster.isLoading) {
-    return <p className="pt-12 text-sm text-[var(--color-stone)]">Loading…</p>
-  }
-
-  // Declarative redirect — calling navigate() during render fires a side
-  // effect from the render path, which can leave the screen blank until a
-  // manual refresh (the navigate happens, but the current render returns
-  // null in the meantime, and effect-driven router updates aren't
-  // guaranteed before paint). <Navigate /> is the supported React-Router
-  // way to redirect from a render path.
-  if (!roster.data?.verified) {
-    return <Navigate to="/support/verify" replace />
   }
 
   return (
@@ -89,8 +62,8 @@ export function RecipientApply() {
         transition={transition.default}
         className="mt-3 text-[13px] leading-relaxed text-[var(--color-stone)]"
       >
-        Your name never appears in the steward queue — only a short code (e.g.{' '}
-        <span className="font-mono text-[var(--color-ink)]">R‑7421</span>). Two stewards must agree before any decision. You can ask once.
+        Your name never appears in the review queue — only a short code (e.g.{' '}
+        <span className="font-mono text-[var(--color-ink)]">R‑7421</span>). You can ask once.
       </motion.p>
 
       <motion.div variants={stagger(0.07, 0.15)} initial="hidden" animate="show" className="mt-6 space-y-4">
@@ -126,7 +99,7 @@ export function RecipientApply() {
             />
           </div>
           <p className="mt-1 text-[10px] text-[var(--color-stone)]">
-            Optional but helpful. Stewards see this; givers never do.
+            Optional but helpful. Reviewers see this; givers never do.
           </p>
         </motion.label>
 
@@ -137,7 +110,7 @@ export function RecipientApply() {
               Each week we credit your <span className="font-medium">wallet</span> up to your weekly cap — based on attendance. You decide when to withdraw to your bank account from <span className="font-mono">Wallet → Withdraw</span>.
             </p>
             <p className="mt-2 text-[11px] text-[var(--color-stone)] leading-relaxed">
-              No one moves money on your behalf without your action. Stewards approve recipients and oversee the system — they never send funds directly to your bank.
+              No one moves money on your behalf without your action.
             </p>
           </div>
         </motion.div>
@@ -167,14 +140,14 @@ export function RecipientApply() {
         disabled={submitting}
         className="btn-primary w-full mt-8 h-[52px]"
       >
-        {submitting ? 'Sending…' : 'Send to stewards'}
+        {submitting ? 'Sending…' : 'Send application'}
       </motion.button>
       <motion.p
         variants={fadeUp}
         transition={transition.slow}
         className="text-[11px] mt-3 text-center text-[var(--color-stone)]"
       >
-        Two stewards must agree. You'll be told the outcome — never anyone else.
+        You'll be told the outcome — never anyone else.
       </motion.p>
     </motion.form>
   )

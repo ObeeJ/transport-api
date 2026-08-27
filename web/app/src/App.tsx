@@ -31,7 +31,6 @@ import { DriverApply } from '@/routes/DriverApply'
 import { RecipientStatus } from '@/routes/RecipientStatus'
 import { RecipientApply } from '@/routes/RecipientApply'
 import { RecipientBank } from '@/routes/RecipientBank'
-import { RosterVerify } from '@/routes/RosterVerify'
 
 // Account (shared)
 import { AccountPage } from '@/routes/AccountPage'
@@ -89,11 +88,6 @@ export default function App() {
         <Route element={<RoleShell role="commuter" />}>
           <Route path="/ride" element={<RiderHome />} />
           <Route path="/trip/:tripId" element={<ActiveTrip />} />
-          <Route path="/support" element={<RecipientStatus />} />
-          <Route path="/support/status" element={<RecipientStatus />} />
-          <Route path="/support/verify" element={<RosterVerify />} />
-          <Route path="/support/apply" element={<RecipientApply />} />
-          <Route path="/support/bank" element={<RecipientBank />} />
           <Route path="/wallet" element={<WalletPage />} />
         </Route>
 
@@ -108,6 +102,10 @@ export default function App() {
           <Route path="/account" element={<AccountPage />} />
           <Route path="/account/verify-email" element={<EmailVerify />} />
           <Route path="/notifications" element={<NotificationsPage />} />
+          <Route path="/support" element={<RecipientStatus />} />
+          <Route path="/support/status" element={<RecipientStatus />} />
+          <Route path="/support/apply" element={<RecipientApply />} />
+          <Route path="/support/bank" element={<RecipientBank />} />
         </Route>
 
         {/* ── Admin console ── */}
