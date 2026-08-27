@@ -472,7 +472,7 @@ function SOSButton({ tripId }: { tripId: string }) {
         {fired && queued
           ? 'No network right now. This alert is saved and will send automatically when connection returns.'
           : fired
-            ? 'A steward has been told. Stay on the trip view.'
+            ? 'The team has been notified. Stay on the trip view.'
             : 'Hold 2 seconds. The alert is saved locally if your data drops.'}
       </p>
     </div>

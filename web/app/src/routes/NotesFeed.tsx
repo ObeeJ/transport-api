@@ -61,7 +61,7 @@ export function NotesFeed() {
       </div>
 
       <div className="mt-6">
-        <div className="label-cap mb-3">From the class</div>
+        <div className="label-cap mb-3">From the community</div>
         {feed.isLoading ? (
           <p className="text-sm text-[var(--color-stone)]">Loading…</p>
         ) : (feed.data?.items ?? []).length === 0 ? (

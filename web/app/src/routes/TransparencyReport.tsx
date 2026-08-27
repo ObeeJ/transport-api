@@ -114,7 +114,7 @@ export function TransparencyReport() {
 
           {/* Attendance */}
           <motion.div variants={fadeUp} transition={transition.default} className="card-base p-5">
-            <div className="label-cap mb-2">Class attendance</div>
+            <div className="label-cap mb-2">Attendance</div>
             {r.bucketSuppressed ? (
               <div className="flex items-start gap-3">
                 <span
@@ -137,7 +137,7 @@ export function TransparencyReport() {
                   <span className="text-[36px] font-medium tracking-tight text-[var(--color-moss)]">
                     {r.attendanceRate.toFixed(0)}%
                   </span>
-                  <span className="text-[12px] text-[var(--color-stone)]">of recipients attended class this period</span>
+                  <span className="text-[12px] text-[var(--color-stone)]">of recipients attended this period</span>
                 </div>
                 <p className="mt-3 text-[12px] text-[var(--color-stone)] leading-relaxed">
                   That's <span className="font-medium text-[var(--color-indigo)]">{r.verifiedAttendances.toLocaleString('en-NG')} verified attendances</span>.

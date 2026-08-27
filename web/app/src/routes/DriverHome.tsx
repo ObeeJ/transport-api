@@ -160,7 +160,7 @@ export function DriverHome() {
           >
             <div className="label-cap text-[var(--color-clay)] font-bold">Driver verification required</div>
             <p className="mt-1.5 text-xs text-[var(--color-stone)] leading-relaxed">
-              To guarantee community safety, two active stewards review driver profiles before you can publish empty seats.
+              To guarantee community safety, your profile is reviewed before you can publish empty seats.
             </p>
             <Link to="/drive/apply" className="btn-primary mt-3 h-10 px-5 text-xs inline-flex">
               Apply to drive
@@ -188,10 +188,10 @@ export function DriverHome() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-[11px] font-semibold tracking-[0.08em] uppercase text-[var(--color-indigo)]">Under review</span>
-                    <span className="text-[9px] font-mono font-bold tracking-wider text-[var(--color-stone)] bg-[var(--color-cream-2)] px-2 py-0.5 rounded-full border border-[var(--color-hairline)]">2 of 2 stewards</span>
+                    <span className="text-[9px] font-mono font-bold tracking-wider text-[var(--color-stone)] bg-[var(--color-cream-2)] px-2 py-0.5 rounded-full border border-[var(--color-hairline)]">Under review</span>
                   </div>
                   <p className="mt-1.5 text-[12px] leading-[1.6] text-[var(--color-stone)]">
-                    Your driver profile is being verified. You'll get a notification the moment both stewards sign off.
+                    Your driver profile is being verified. You'll get a notification the moment it's approved.
                   </p>
                   {/* Progress track */}
                   <div className="mt-3.5 flex items-center gap-2.5">
@@ -472,7 +472,7 @@ function PublishTripForm({ hubs, onCancel, onDone }: { hubs: Hub[]; onCancel: ()
     onSuccess: () => { toast.show('Trip published! Riders can now book a seat.', 'success'); onDone() },
     onError: (err) => {
       if (err instanceof ApiError && err.code === 'driver_not_approved') {
-        setError('Your driver profile needs steward approval before publishing trips.')
+        setError('Your driver profile needs admin approval before publishing trips.')
         return
       }
       setError(err instanceof ApiError ? err.message : 'Could not publish.')

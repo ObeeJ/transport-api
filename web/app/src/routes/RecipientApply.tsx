@@ -107,7 +107,7 @@ export function RecipientApply() {
           <div className="label-cap mb-2">How disbursements work</div>
           <div className="card-base p-4 bg-[var(--color-cream)]">
             <p className="text-[12px] text-[var(--color-ink)] leading-relaxed">
-              Each week we credit your <span className="font-medium">wallet</span> up to your weekly cap — based on attendance. You decide when to withdraw to your bank account from <span className="font-mono">Wallet → Withdraw</span>.
+              Each week we credit your <span className="font-medium">wallet</span> up to your weekly cap. You decide when to withdraw to your bank account from <span className="font-mono">Wallet → Withdraw</span>.
             </p>
             <p className="mt-2 text-[11px] text-[var(--color-stone)] leading-relaxed">
               No one moves money on your behalf without your action.

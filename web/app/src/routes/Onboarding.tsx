@@ -71,10 +71,10 @@ export function Onboarding() {
       </div>
 
       <h1 className="mt-10 text-[36px] leading-[1.05] font-medium tracking-tight text-[var(--color-indigo)]">
-        Class transport,<br />together.
+        Community transport,<br />together.
       </h1>
       <p className="mt-4 text-[13px] leading-relaxed text-[var(--color-stone)]">
-        A shared fund and a ride network for your class. Give when you can. Ride when you need to. Anonymously, either way.
+        A shared fund and a ride network for your community. Give when you can. Ride when you need to. Anonymously, either way.
       </p>
 
       <div className="mt-8 space-y-4">
@@ -107,7 +107,7 @@ export function Onboarding() {
             type="email"
             required
             autoComplete="email"
-            placeholder="you@school.edu.ng"
+            placeholder="you@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="w-full bg-transparent text-sm outline-none placeholder:text-[var(--color-stone-soft)]"
@@ -175,7 +175,7 @@ export function Onboarding() {
             <Link to="/privacy" target="_blank" rel="noopener noreferrer" className="text-[var(--color-ink)] underline underline-offset-[3px]">
               Privacy Promise
             </Link>
-            . Akin will only hold what’s needed to run the class fund and ride
+            . Akin will only hold what’s needed to run the community fund and ride
             network, and never sell or share my data for anything else.
           </span>
         </label>
