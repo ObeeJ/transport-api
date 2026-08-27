@@ -88,6 +88,22 @@ func (h *AdminHandler) Reports(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"items": []any{}})
 }
 
+func (h *AdminHandler) ReportAction(c *fiber.Ctx) error {
+	adminUser := middleware.CurrentUser(c)
+	if adminUser == nil {
+		return c.Status(401).JSON(fiber.Map{"error": "not_authenticated"})
+	}
+	var req struct {
+		Action string `json:"action"`
+		Note   string `json:"note"`
+	}
+	if err := c.BodyParser(&req); err != nil || req.Action == "" {
+		return c.Status(400).JSON(fiber.Map{"error": "invalid_body"})
+	}
+	_ = admin.LogAction(h.db, adminUser.ID, nil, nil, "report_"+req.Action, req.Note, nil)
+	return c.JSON(fiber.Map{"ok": true})
+}
+
 // TrustQueue lists rides the Trust Engine + matcher couldn't resolve
 // automatically — the ~10% that need a human admin's emergency-grant nod.
 func (h *AdminHandler) TrustQueue(c *fiber.Ctx) error {

@@ -419,6 +419,7 @@ func main() {
 	adminGroup.Get("/pricing", adminH.GetPricing)
 	adminGroup.Patch("/pricing", adminH.UpdatePricing)
 	adminGroup.Get("/reports", adminH.Reports)
+	adminGroup.Post("/reports/:id/action", adminH.ReportAction)
 	adminGroup.Get("/trust-queue", adminH.TrustQueue)
 	adminGroup.Get("/drivers/pending", adminH.PendingDrivers)
 	adminGroup.Post("/drivers/:userId/review", adminH.ReviewDriver)
