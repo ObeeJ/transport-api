@@ -16,6 +16,7 @@ import (
 	"github.com/obeej/akin/internal/email"
 	"github.com/obeej/akin/internal/handlers"
 	"github.com/obeej/akin/internal/idempotency"
+	"github.com/obeej/akin/internal/kyc"
 	"github.com/obeej/akin/internal/middleware"
 	"github.com/obeej/akin/internal/outbox"
 	"github.com/obeej/akin/internal/payments"
@@ -23,6 +24,8 @@ import (
 	"github.com/obeej/akin/internal/reconciler"
 	"github.com/obeej/akin/internal/repository"
 	"github.com/obeej/akin/internal/service"
+	"github.com/obeej/akin/internal/storage"
+	"github.com/obeej/akin/internal/wings"
 	"github.com/obeej/akin/internal/ws"
 )
 
@@ -141,8 +144,27 @@ func main() {
 
 	// --- Outbox dispatcher ---
 	outboxDispatcher := outbox.NewDispatcher(gdb)
-	// Register handlers for known event types here as they are implemented.
 	outboxDispatcher.Start()
+
+	// --- Wings expiry worker ---
+	wingsWorker := wings.NewExpiryWorker(gdb)
+	wingsWorker.Start()
+
+	// --- KYC worker ---
+	kycClient := kyc.NewPremblyClient(
+		os.Getenv("PREMBLY_API_KEY"),
+		os.Getenv("PREMBLY_APP_ID"),
+	)
+	kycWorker := kyc.NewWorker(gdb, kycClient)
+	kycWorker.Start()
+
+	// --- R2 storage ---
+	r2 := storage.NewR2Client(
+		os.Getenv("R2_ACCOUNT_ID"),
+		os.Getenv("R2_ACCESS_KEY_ID"),
+		os.Getenv("R2_SECRET_ACCESS_KEY"),
+		os.Getenv("R2_BUCKET"),
+	)
 
 	// --- Handlers ---
 	authH := handlers.NewAuthHandler(authSvc, cfg)
@@ -169,6 +191,20 @@ func main() {
 	strikeH := handlers.NewStrikeHandler(integritySvc)
 	reportH := handlers.NewReportHandler(reportSvc)
 	wsH := handlers.NewWSHandler(seatHub)
+
+	// Phase 1–7 handlers
+	wingsH := handlers.NewWingsHandler(gdb)
+	kycH := handlers.NewKYCHandler(gdb)
+	pricingH := handlers.NewPricingHandler(gdb)
+	evidenceH := handlers.NewEvidenceHandler(gdb, r2)
+	adminH := handlers.NewAdminHandler(gdb)
+	trustH := handlers.NewTrustHandler(gdb)
+	matcherH := handlers.NewMatcherHandler(gdb)
+	socialH := handlers.NewSocialHandler(gdb)
+	ambassadorH := handlers.NewAmbassadorHandler(gdb)
+	sponsorH := handlers.NewSponsorHandler(gdb)
+	circleH := handlers.NewCircleHandler(gdb)
+	institutionH := handlers.NewInstitutionHandler(gdb)
 
 	// --- App ---
 	app := fiber.New(fiber.Config{
@@ -359,6 +395,52 @@ func main() {
 	// Pool (public aggregate)
 	app.Get("/pool/this-week", poolH.ThisWeek)
 
+	// Phase 1 — Wings + KYC
+	app.Get("/wings/balance", authed, wingsH.Balance)
+	app.Get("/wings/history", authed, wingsH.History)
+	app.Post("/kyc/nin", authed, verifiedWrites, kycH.SubmitNIN)
+	app.Get("/kyc/status/:jobId", authed, kycH.Status)
+
+	// Phase 2 — Pricing + Evidence + Admin
+	app.Post("/pricing/quote", authed, pricingH.Quote)
+	app.Post("/evidence/upload-url", authed, verifiedWrites, evidenceH.UploadURL)
+	app.Get("/evidence", authed, evidenceH.List)
+	adminGroup := app.Group("/admin", authed, middleware.RequireSteward())
+	adminGroup.Get("/metrics", adminH.Metrics)
+	adminGroup.Get("/pricing", adminH.GetPricing)
+	adminGroup.Patch("/pricing", adminH.UpdatePricing)
+	adminGroup.Get("/reports", adminH.Reports)
+	adminGroup.Get("/drivers/pending", adminH.PendingDrivers)
+	adminGroup.Post("/drivers/:userId/review", adminH.ReviewDriver)
+	adminGroup.Post("/evidence/:id/review", adminH.ReviewEvidence)
+
+	// Phase 3 — Trust + Matcher
+	app.Get("/trust/me", authed, trustH.Me)
+	app.Get("/rides/:id/status", authed, matcherH.RideStatus)
+
+	// Phase 4 — Social + Transparency
+	app.Post("/posts", authed, verifiedWrites, socialH.CreatePost)
+	app.Get("/feed", authed, socialH.Feed)
+	app.Post("/posts/:id/clap", authed, socialH.Clap)
+	app.Post("/follows/:userId", authed, socialH.ToggleFollow)
+	app.Get("/streaks/me", authed, socialH.Streaks)
+	app.Get("/transparency/holds", authed, socialH.TransparencyHolds)
+
+	// Phase 5 — Ambassador + Sponsor
+	app.Post("/ambassador/activate", authed, ambassadorH.Activate)
+	app.Get("/ambassador/me", authed, ambassadorH.Me)
+	app.Post("/sponsor/recurring", authed, verifiedWrites, paymentLimit, sponsorH.SetupRecurring)
+	app.Delete("/sponsor/recurring/:id", authed, sponsorH.Cancel)
+
+	// Phase 6 — Circle
+	app.Get("/circle/status", authed, circleH.Status)
+	app.Post("/circle/purchase", authed, verifiedWrites, paymentLimit, circleH.Purchase)
+
+	// Phase 7 — Multi-tenant Circles
+	app.Get("/circles/mine", authed, institutionH.Mine)
+	app.Post("/circles/join/:token", authed, institutionH.Join)
+	app.Post("/circles/invite", authed, institutionH.GenerateInvite)
+
 	// Boot
 	weeklyCredit := reconciler.NewWeeklyCreditJob(recipientRepo, walletSvc, attendanceSvc, gdb)
 	rec := reconciler.New(gdb, 5*time.Minute).WithWeeklyCredit(weeklyCredit)
@@ -379,6 +461,8 @@ func main() {
 	slog.Info("shutting down")
 	rec.Stop()
 	outboxDispatcher.Stop()
+	wingsWorker.Stop()
+	kycWorker.Stop()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := app.ShutdownWithContext(ctx); err != nil {
