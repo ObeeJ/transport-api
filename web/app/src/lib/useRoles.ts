@@ -4,44 +4,59 @@ import { api } from '@/lib/api'
 
 export type Role = 'giver' | 'commuter' | 'driver' | 'steward'
 
-// Derives which roles a user has access to based on their account state.
-// Results are cached in module-level state to avoid re-fetching on every render.
-let cachedRoles: Role[] | null = null
-let cachedUserId: string | null = null
+const ROLES_CACHE_KEY = 'akin.roles'
+
+function readCache(userId: string): Role[] | null {
+  try {
+    const raw = sessionStorage.getItem(ROLES_CACHE_KEY)
+    if (!raw) return null
+    const { id, roles } = JSON.parse(raw)
+    if (id === userId) return roles as Role[]
+  } catch { /* ignore */ }
+  return null
+}
+
+function writeCache(userId: string, roles: Role[]): void {
+  try {
+    sessionStorage.setItem(ROLES_CACHE_KEY, JSON.stringify({ id: userId, roles }))
+  } catch { /* ignore */ }
+}
+
+export function clearRolesCache(): void {
+  try { sessionStorage.removeItem(ROLES_CACHE_KEY) } catch { /* ignore */ }
+}
 
 export function useRoles() {
   const { user, status } = useAuth()
   const [roles, setRoles] = useState<Role[]>(() => {
-    if (cachedUserId === user?.id && cachedRoles) return cachedRoles
+    if (user?.id) {
+      const cached = readCache(user.id)
+      if (cached) return cached
+    }
     return ['giver', 'commuter']
   })
 
   useEffect(() => {
     if (status === 'loading') return
-    const defaultRoles: Role[] = ['giver', 'commuter']
     if (!user) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setRoles(defaultRoles)
+      setRoles(['giver', 'commuter'])
       return
     }
-    // Return cache if same user
-    if (cachedUserId === user.id && cachedRoles) {
-      setRoles(cachedRoles)
+    const cached = readCache(user.id)
+    if (cached) {
+      setRoles(cached)
       return
     }
-    // Fetch both in parallel, single time per user session
     Promise.all([
       api.get<{ status: string }>('/driver/me').catch(() => null),
       api.get<{ status: string }>('/recipients/me').catch(() => null),
-    ]).then(([driver, _recipient]) => {
+    ]).then(([driver]) => {
       const r: Role[] = ['giver', 'commuter']
       if (driver?.status === 'approved' || driver?.status === 'pending') r.push('driver')
       if (user.role === 'steward' || user.role === 'admin') r.push('steward')
-      cachedRoles = r
-      cachedUserId = user.id
+      writeCache(user.id, r)
       setRoles(r)
     })
-  // user object identity changes on every render; key on id + status only
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, status])
 

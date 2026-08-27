@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import { ApiError, api } from '@/lib/api'
+import { clearRolesCache } from '@/lib/useRoles'
 
 export type User = {
   id: string
@@ -68,6 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await api.post('/auth/logout')
     } finally {
+      clearRolesCache()
       setUser(null)
       setStatus('unauthenticated')
     }
