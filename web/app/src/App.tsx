@@ -2,6 +2,7 @@ import { Routes, Route } from 'react-router'
 import { RoleShell, SharedRoleShell } from '@/components/layout/RoleShell'
 import { RequireAuth } from '@/components/RequireAuth'
 import { RequireSteward } from '@/components/RequireSteward'
+import { RequireAdmin } from '@/components/RequireAdmin'
 import { StewardShell } from '@/components/layout/StewardShell'
 
 // Public
@@ -52,6 +53,12 @@ import { StewardSignIn } from '@/routes/steward/StewardSignIn'
 import { PrivacyPromise } from '@/routes/PrivacyPromise'
 import { NotFound } from '@/routes/NotFound'
 
+// Admin console
+import { AdminDashboard } from '@/routes/admin/AdminDashboard'
+import { PricingSettings } from '@/routes/admin/PricingSettings'
+import { DriverQueue } from '@/routes/admin/DriverQueue'
+import { ReportQueue } from '@/routes/admin/ReportQueue'
+
 export default function App() {
   return (
     <Routes>
@@ -101,6 +108,14 @@ export default function App() {
           <Route path="/account" element={<AccountPage />} />
           <Route path="/account/verify-email" element={<EmailVerify />} />
           <Route path="/notifications" element={<NotificationsPage />} />
+        </Route>
+
+        {/* ── Admin console ── */}
+        <Route element={<RequireAdmin />}>
+          <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="/admin/pricing" element={<PricingSettings />} />
+          <Route path="/admin/drivers" element={<DriverQueue />} />
+          <Route path="/admin/reports" element={<ReportQueue />} />
         </Route>
 
         {/* ── Steward console ── */}
