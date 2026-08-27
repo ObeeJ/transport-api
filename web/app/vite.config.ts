@@ -17,7 +17,7 @@ export default defineConfig({
       manifest: {
         name: 'Akin',
         short_name: 'Akin',
-        description: 'Class transport, together.',
+        description: 'Community transport, together.',
         theme_color: '#1B2A4E',
         background_color: '#F5EFE6',
         display: 'standalone',
@@ -34,6 +34,11 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,woff2}'],
         navigateFallback: '/index.html',
+        // Bump this version string whenever you need to force all PWA clients
+        // to discard their cached shell and fetch fresh assets.
+        additionalManifestEntries: [
+          { url: '/__sw_version', revision: '20260723-1' },
+        ],
         runtimeCaching: [
           {
             urlPattern: ({ url }) => url.pathname.startsWith('/reports/') || url.pathname.startsWith('/hubs'),
